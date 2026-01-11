@@ -5,7 +5,7 @@ import { QRCodeCanvas } from "qrcode.react";
 import { motion, AnimatePresence } from "framer-motion";
 import { ArrowLeft, RefreshCw, Trash2, Lock, Printer, List, Link as LinkIcon, Download, Calendar as CalendarIcon, ChevronLeft, ChevronRight, Settings, MapPin, Power, Database, Trophy, Search, Loader2 } from "lucide-react";
 import Link from "next/link";
-import { checkAdminSession, loginAdmin, logoutAdmin, getTodaysLogs, clearHistory, getMonthlyStats, getLogsByDate, getSystemSettings, updateSystemSetting, getAllLogs, getAttendanceRankings, deleteLog } from "../actions";
+import { checkAdminSession, loginAdmin, logoutAdmin, getTodaysLogs, clearHistory, getMonthlyStats, getLogsByDate, getSystemSettings, updateSystemSetting, getAllLogs, getAttendanceRankings, deleteLog, getAttendees, deleteAttendee } from "../actions";
 import { format, startOfMonth, endOfMonth, startOfWeek, endOfWeek, eachDayOfInterval, isSameMonth, isSameDay, addMonths, subMonths } from "date-fns";
 import clsx from "clsx";
 
@@ -14,6 +14,14 @@ interface ScanRecord {
     name: string;
     phone: string;
     created_at: string;
+}
+
+interface AttendeeRecord {
+    id: string;
+    name: string;
+    phone: string;
+    created_at: string;
+    checkInCount: number;
 }
 
 export default function AdminPage() {
@@ -34,14 +42,27 @@ export default function AdminPage() {
     const [updatingSettings, setUpdatingSettings] = useState(false);
 
     // DB State
+    const [dbView, setDbView] = useState<'logs' | 'attendees'>('logs'); // Toggle between logs and attendees
+    const [dbSortBy, setDbSortBy] = useState("created_at");
+    const [dbSortOrder, setDbSortOrder] = useState<'asc' | 'desc'>('desc');
+
+    // Logs View State
     const [dbLogs, setDbLogs] = useState<ScanRecord[]>([]);
     const [dbCount, setDbCount] = useState(0);
     const [dbPage, setDbPage] = useState(1);
+
+    // Attendees View State
+    const [attendees, setAttendees] = useState<AttendeeRecord[]>([]);
+    const [attendeeCount, setAttendeeCount] = useState(0);
+    const [attendeePage, setAttendeePage] = useState(1);
+
     const [dbSearch, setDbSearch] = useState("");
     const [dbLoading, setDbLoading] = useState(false);
 
     // Ranking State
     const [rankings, setRankings] = useState<any[]>([]);
+    const [rankPeriod, setRankPeriod] = useState<'all' | 'month'>('all');
+    const [rankSort, setRankSort] = useState<'count' | 'streak'>('count');
 
     useEffect(() => {
         checkAdminSession().then((valid) => {
@@ -61,9 +82,12 @@ export default function AdminPage() {
     }, []);
 
     useEffect(() => {
-        if (isAdmin && tab === "db") loadDbLogs();
+        if (isAdmin && tab === "db") {
+            if (dbView === 'logs') loadDbLogs();
+            else loadAttendees();
+        }
         if (isAdmin && tab === "ranking") loadRankings();
-    }, [isAdmin, tab, dbPage, dbSearch]);
+    }, [isAdmin, tab, dbPage, attendeePage, dbSearch, rankPeriod, rankSort, dbView, dbSortBy, dbSortOrder]);
 
     const handleLogin = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -92,7 +116,7 @@ export default function AdminPage() {
 
     const loadDbLogs = async () => {
         setDbLoading(true);
-        const res = await getAllLogs(dbPage, 20, dbSearch);
+        const res = await getAllLogs(dbPage, 20, dbSearch, dbSortBy, dbSortOrder);
         const mapped = res.data.map((d: any) => ({
             id: d.id,
             name: d.name,
@@ -104,15 +128,78 @@ export default function AdminPage() {
         setDbLoading(false);
     }
 
+    const loadAttendees = async () => {
+        setDbLoading(true);
+        const res = await getAttendees(attendeePage, 20, dbSearch, dbSortBy, dbSortOrder);
+        const mapped = res.data.map((d: any) => ({
+            id: d.id,
+            name: d.name,
+            phone: d.phone,
+            created_at: new Date(d.created_at).toLocaleDateString('ko-KR'),
+            checkInCount: d.checkInCount
+        }));
+        setAttendees(mapped);
+        setAttendeeCount(res.count);
+        setDbLoading(false);
+    }
+
     const handleDeleteLog = async (id: number) => {
         if (!confirm("이 기록을 삭제하시겠습니까? (복구 불가)")) return;
         await deleteLog(id);
-        loadDbLogs(); // Refresh
+        if (dbView === 'logs') loadDbLogs();
+        else loadAttendees(); // Refresh stats if logic changes later, currently independent
         loadLogs(); // Refresh dashboard too
     }
 
+    const handleDeleteAttendee = async (id: string) => {
+        if (!confirm("이 사용자와 모든 출석 기록을 삭제하시겠습니까? (복구 불가)")) return;
+        await deleteAttendee(id);
+        loadAttendees();
+        loadLogs(); // Refresh dashboard
+    }
+
+    const handleExport = async () => {
+        const isLogs = dbView === 'logs';
+        if (!confirm(`${isLogs ? '출석 로그' : '등록 교인'} 전체 데이터를 엑셀(CSV)로 다운로드하시겠습니까?`)) return;
+
+        // Fetch all data (high limit)
+        const limit = 10000;
+        let csvContent = "data:text/csv;charset=utf-8,\uFEFF"; // BOM for Excel
+
+        if (isLogs) {
+            const res = await getAllLogs(1, limit, dbSearch, dbSortBy, dbSortOrder);
+            csvContent += "ID,날짜,이름,전화번호\n";
+            res.data.forEach((row: any) => {
+                csvContent += `${row.id},${new Date(row.created_at).toLocaleString('ko-KR')},${row.name},${row.phone}\n`;
+            });
+        } else {
+            const res = await getAttendees(1, limit, dbSearch, dbSortBy, dbSortOrder);
+            csvContent += "ID,이름,전화번호,등록일,총출석수\n";
+            res.data.forEach((row: any) => {
+                csvContent += `${row.id},${row.name},${row.phone},${new Date(row.created_at).toLocaleDateString('ko-KR')},${row.checkInCount}\n`;
+            });
+        }
+
+        const encodedUri = encodeURI(csvContent);
+        const link = document.createElement("a");
+        link.setAttribute("href", encodedUri);
+        link.setAttribute("download", `${isLogs ? 'attendance_logs' : 'attendees_list'}_${format(new Date(), "yyyyMMdd")}.csv`);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    }
+
+    const handleSort = (column: string) => {
+        if (dbSortBy === column) {
+            setDbSortOrder(prev => prev === 'asc' ? 'desc' : 'asc');
+        } else {
+            setDbSortBy(column);
+            setDbSortOrder('desc'); // Default new sort to desc
+        }
+    }
+
     const loadRankings = async () => {
-        const data = await getAttendanceRankings(20); // Top 20
+        const data = await getAttendanceRankings(20, rankPeriod, rankSort); // Pass filters
         setRankings(data);
     }
 
@@ -170,7 +257,6 @@ export default function AdminPage() {
 
     const setLocation = async () => {
         if (!confirm("현재 위치를 교회 위치로 설정하시겠습니까?\n이후 이 위치에서 반경 200m 이내만 출석이 허용됩니다.")) return;
-
         setUpdatingSettings(true);
         if ("geolocation" in navigator) {
             navigator.geolocation.getCurrentPosition(async (pos) => {
@@ -198,7 +284,6 @@ export default function AdminPage() {
         setUpdatingSettings(false);
     }
 
-    // Generate Calendar Grid
     const CalendarGrid = () => {
         const monthStart = startOfMonth(currentDate);
         const monthEnd = endOfMonth(monthStart);
@@ -245,8 +330,6 @@ export default function AdminPage() {
             </div>
         )
     };
-
-    // --- Render ---
 
     if (!isAdmin) {
         return (
@@ -424,15 +507,38 @@ export default function AdminPage() {
 
             {tab === "db" && (
                 <div className="w-full space-y-4 animate-in fade-in duration-300">
-                    <div className="bg-white/5 p-4 rounded-2xl border border-white/10 flex gap-2">
-                        <Search className="w-5 h-5 text-slate-400 mt-2.5" />
-                        <input
-                            type="text"
-                            value={dbSearch}
-                            onChange={(e) => { setDbSearch(e.target.value); setDbPage(1); }}
-                            placeholder="이름이나 전화번호로 검색..."
-                            className="w-full bg-transparent border-none text-white focus:ring-0 placeholder:text-slate-600 outline-none p-2"
-                        />
+                    <div className="flex gap-2">
+                        <div className="flex bg-white/5 p-1 rounded-xl border border-white/10">
+                            <button
+                                onClick={() => setDbView('logs')}
+                                className={clsx("px-4 py-2 rounded-lg text-sm font-bold transition-all", dbView === 'logs' ? "bg-white text-black" : "text-slate-400 hover:text-white")}
+                            >
+                                출석 로그
+                            </button>
+                            <button
+                                onClick={() => setDbView('attendees')}
+                                className={clsx("px-4 py-2 rounded-lg text-sm font-bold transition-all", dbView === 'attendees' ? "bg-white text-black" : "text-slate-400 hover:text-white")}
+                            >
+                                등록 교인
+                            </button>
+                        </div>
+                        <div className="bg-white/5 p-2 px-4 rounded-xl border border-white/10 flex-1 flex gap-2">
+                            <Search className="w-5 h-5 text-slate-400 mt-1" />
+                            <input
+                                type="text"
+                                value={dbSearch}
+                                onChange={(e) => { setDbSearch(e.target.value); if (dbView === 'logs') setDbPage(1); else setAttendeePage(1); }}
+                                placeholder={dbView === 'logs' ? "로그 검색 (이름, 번호)..." : "교인 검색 (이름, 번호)..."}
+                                className="w-full bg-transparent border-none text-white focus:ring-0 placeholder:text-slate-600 outline-none"
+                            />
+                        </div>
+                        <button
+                            onClick={handleExport}
+                            className="bg-white/5 p-3 rounded-xl border border-white/10 hover:bg-white/10 transition-colors text-slate-400 hover:text-white"
+                            title="엑셀 다운로드"
+                        >
+                            <Download className="w-5 h-5" />
+                        </button>
                     </div>
 
                     <div className="bg-white/5 rounded-2xl border border-white/10 overflow-hidden min-h-[400px]">
@@ -440,18 +546,40 @@ export default function AdminPage() {
                             <table className="w-full text-left text-sm whitespace-nowrap">
                                 <thead className="bg-white/5 text-slate-400 font-medium">
                                     <tr>
-                                        <th className="p-4">날짜</th>
-                                        <th className="p-4">이름</th>
-                                        <th className="p-4">전화번호</th>
-                                        <th className="p-4 text-right">관리</th>
+                                        {dbView === 'logs' ? (
+                                            <>
+                                                <th className="p-4 cursor-pointer hover:text-white" onClick={() => handleSort('created_at')}>
+                                                    날짜 {dbSortBy === 'created_at' && (dbSortOrder === 'asc' ? '↑' : '↓')}
+                                                </th>
+                                                <th className="p-4 cursor-pointer hover:text-white" onClick={() => handleSort('name')}>
+                                                    이름 {dbSortBy === 'name' && (dbSortOrder === 'asc' ? '↑' : '↓')}
+                                                </th>
+                                                <th className="p-4">전화번호</th>
+                                                <th className="p-4 text-right">관리</th>
+                                            </>
+                                        ) : (
+                                            <>
+                                                <th className="p-4 cursor-pointer hover:text-white" onClick={() => handleSort('name')}>
+                                                    이름 {dbSortBy === 'name' && (dbSortOrder === 'asc' ? '↑' : '↓')}
+                                                </th>
+                                                <th className="p-4">전화번호</th>
+                                                <th className="p-4 text-center cursor-pointer hover:text-white" onClick={() => handleSort('created_at')}>
+                                                    등록일 {dbSortBy === 'created_at' && (dbSortOrder === 'asc' ? '↑' : '↓')}
+                                                </th>
+                                                <th className="p-4 text-center">
+                                                    총 출석
+                                                </th>
+                                                <th className="p-4 text-right">관리</th>
+                                            </>
+                                        )}
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-white/5">
                                     {dbLoading ? (
-                                        <tr><td colSpan={4} className="p-8 text-center text-slate-500"><Loader2 className="w-6 h-6 mx-auto animate-spin" /></td></tr>
-                                    ) : dbLogs.length === 0 ? (
-                                        <tr><td colSpan={4} className="p-8 text-center text-slate-500">데이터가 없습니다.</td></tr>
-                                    ) : (
+                                        <tr><td colSpan={5} className="p-8 text-center text-slate-500"><Loader2 className="w-6 h-6 mx-auto animate-spin" /></td></tr>
+                                    ) : (dbView === 'logs' ? dbLogs : attendees).length === 0 ? (
+                                        <tr><td colSpan={5} className="p-8 text-center text-slate-500">데이터가 없습니다.</td></tr>
+                                    ) : dbView === 'logs' ? (
                                         dbLogs.map(log => (
                                             <tr key={log.id} className="hover:bg-white/5 transition-colors">
                                                 <td className="p-4 text-slate-300">{log.created_at}</td>
@@ -459,6 +587,24 @@ export default function AdminPage() {
                                                 <td className="p-4 text-slate-400">{log.phone}</td>
                                                 <td className="p-4 text-right">
                                                     <button onClick={() => handleDeleteLog(log.id)} className="text-slate-500 hover:text-red-400 p-2">
+                                                        <Trash2 className="w-4 h-4" />
+                                                    </button>
+                                                </td>
+                                            </tr>
+                                        ))
+                                    ) : (
+                                        attendees.map(user => (
+                                            <tr key={user.id} className="hover:bg-white/5 transition-colors">
+                                                <td className="p-4 font-bold text-white">{user.name}</td>
+                                                <td className="p-4 text-slate-400">{user.phone}</td>
+                                                <td className="p-4 text-center text-slate-500">{user.created_at}</td>
+                                                <td className="p-4 text-center">
+                                                    <span className="bg-primary/20 text-primary px-2 py-1 rounded-full text-xs font-bold">
+                                                        {user.checkInCount}회
+                                                    </span>
+                                                </td>
+                                                <td className="p-4 text-right">
+                                                    <button onClick={() => handleDeleteAttendee(user.id)} className="text-slate-500 hover:text-red-400 p-2">
                                                         <Trash2 className="w-4 h-4" />
                                                     </button>
                                                 </td>
@@ -472,16 +618,19 @@ export default function AdminPage() {
 
                     <div className="flex justify-between items-center text-sm text-slate-400 px-2">
                         <button
-                            disabled={dbPage === 1}
-                            onClick={() => setDbPage(p => Math.max(1, p - 1))}
+                            disabled={dbView === 'logs' ? dbPage === 1 : attendeePage === 1}
+                            onClick={() => dbView === 'logs' ? setDbPage(p => Math.max(1, p - 1)) : setAttendeePage(p => Math.max(1, p - 1))}
                             className="p-2 hover:text-white disabled:opacity-30"
                         >
                             <ChevronLeft className="w-5 h-5" />
                         </button>
-                        <span>{dbPage} / {Math.ceil(dbCount / 20) || 1} 페이지 (총 {dbCount}건)</span>
+                        <span>
+                            {dbView === 'logs' ? dbPage : attendeePage} / {Math.ceil((dbView === 'logs' ? dbCount : attendeeCount) / 20) || 1} 페이지
+                            (총 {(dbView === 'logs' ? dbCount : attendeeCount)}건)
+                        </span>
                         <button
-                            disabled={dbPage >= Math.ceil(dbCount / 20)}
-                            onClick={() => setDbPage(p => p + 1)}
+                            disabled={dbView === 'logs' ? dbPage >= Math.ceil(dbCount / 20) : attendeePage >= Math.ceil(attendeeCount / 20)}
+                            onClick={() => dbView === 'logs' ? setDbPage(p => p + 1) : setAttendeePage(p => p + 1)}
                             className="p-2 hover:text-white disabled:opacity-30"
                         >
                             <ChevronRight className="w-5 h-5" />
@@ -492,8 +641,8 @@ export default function AdminPage() {
 
             {tab === "ranking" && (
                 <div className="w-full space-y-6 animate-in fade-in duration-300">
-                    <div className="bg-gradient-to-br from-yellow-500/20 to-amber-700/10 border border-yellow-500/20 p-6 rounded-3xl flex items-center gap-4">
-                        <div className="p-4 bg-yellow-500/20 rounded-full text-yellow-500">
+                    <div className="bg-gradient-to-br from-yellow-500/20 to-amber-700/10 border border-yellow-500/20 p-6 rounded-3xl flex items-center gap-4 shadow-lg shadow-yellow-900/10">
+                        <div className="p-4 bg-yellow-500/20 rounded-full text-yellow-500 shadow-inner">
                             <Trophy className="w-8 h-8" />
                         </div>
                         <div>
@@ -502,8 +651,47 @@ export default function AdminPage() {
                         </div>
                     </div>
 
+                    {/* Filters */}
+                    <div className="flex gap-2 overflow-x-auto no-scrollbar pb-1">
+                        {/* Period Filters */}
+                        <div className="flex p-1 bg-white/5 rounded-xl border border-white/10">
+                            <button
+                                onClick={() => { setRankPeriod('all'); }}
+                                className={clsx("px-4 py-2 rounded-lg text-sm font-bold transition-all", rankPeriod === 'all' ? "bg-white text-black" : "text-slate-400 hover:text-white")}
+                            >
+                                전체
+                            </button>
+                            <button
+                                onClick={() => { setRankPeriod('month'); }}
+                                className={clsx("px-4 py-2 rounded-lg text-sm font-bold transition-all", rankPeriod === 'month' ? "bg-white text-black" : "text-slate-400 hover:text-white")}
+                            >
+                                이번 달
+                            </button>
+                        </div>
+
+                        {/* Sort Filters */}
+                        <div className="flex p-1 bg-white/5 rounded-xl border border-white/10 ml-auto">
+                            <button
+                                onClick={() => { setRankSort('count'); }}
+                                className={clsx("px-4 py-2 rounded-lg text-sm font-bold transition-all flex items-center gap-1", rankSort === 'count' ? "bg-primary text-white" : "text-slate-400 hover:text-white")}
+                            >
+                                <List className="w-3 h-3" /> 횟수순
+                            </button>
+                            <button
+                                onClick={() => { setRankSort('streak'); }}
+                                className={clsx("px-4 py-2 rounded-lg text-sm font-bold transition-all flex items-center gap-1", rankSort === 'streak' ? "bg-orange-500 text-white" : "text-slate-400 hover:text-white")}
+                            >
+                                <RefreshCw className="w-3 h-3" /> 연속순
+                            </button>
+                        </div>
+                    </div>
+
                     <div className="grid gap-3">
-                        {rankings.map((user, idx) => (
+                        {rankings.length === 0 ? (
+                            <div className="text-center py-12 text-slate-500 border border-white/5 rounded-3xl bg-white/5">
+                                아직 순위에 든 사람이 없습니다.
+                            </div>
+                        ) : rankings.map((user, idx) => (
                             <motion.div
                                 initial={{ opacity: 0, scale: 0.95 }}
                                 animate={{ opacity: 1, scale: 1 }}
@@ -511,8 +699,8 @@ export default function AdminPage() {
                                 key={`${user.name}-${user.phone}`}
                                 className={clsx(
                                     "flex items-center justify-between p-4 rounded-2xl border",
-                                    idx === 0 ? "bg-gradient-to-r from-yellow-500/10 to-transparent border-yellow-500/30" :
-                                        idx === 1 ? "bg-gradient-to-r from-slate-400/10 to-transparent border-slate-400/30" :
+                                    idx === 0 ? "bg-gradient-to-r from-yellow-500/10 to-transparent border-yellow-500/30 shadow-[0_4px_20px_-5px_rgba(234,179,8,0.2)]" :
+                                        idx === 1 ? "bg-gradient-to-r from-slate-300/10 to-transparent border-slate-300/30" :
                                             idx === 2 ? "bg-gradient-to-r from-amber-700/10 to-transparent border-amber-700/30" :
                                                 "bg-white/5 border-white/5"
                                 )}
@@ -529,12 +717,17 @@ export default function AdminPage() {
                                     </div>
                                     <div>
                                         <p className="font-bold text-white text-lg">{user.name}</p>
-                                        <p className="text-xs text-slate-500">{user.phone}</p>
+                                        <p className="text-xs text-slate-500 flex items-center gap-1">
+                                            {user.phone}
+                                            {user.streak > 1 && <span className="text-orange-400">🔥 {user.streak}</span>}
+                                        </p>
                                     </div>
                                 </div>
                                 <div className="text-right">
-                                    <span className="text-2xl font-black text-white">{user.count}</span>
-                                    <span className="text-xs text-slate-500 ml-1">회</span>
+                                    <span className="text-2xl font-black text-white">{rankSort === 'streak' ? user.streak : user.count}</span>
+                                    <span className="text-xs text-slate-500 ml-1">
+                                        {rankSort === 'streak' ? '일' : '회'}
+                                    </span>
                                 </div>
                             </motion.div>
                         ))}
@@ -659,7 +852,7 @@ export default function AdminPage() {
                     </div>
                 </div>
             )}
-
         </div>
     );
 }
+

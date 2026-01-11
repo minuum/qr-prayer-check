@@ -266,7 +266,7 @@ export async function getTodaysLogs() {
     return data || [];
 }
 
-export async function getAllLogs(page = 1, limit = 20, search = "") {
+export async function getAllLogs(page = 1, limit = 20, search = "", sortBy = "created_at", sortOrder = "desc") {
     const isAdmin = await checkAdminSession();
     if (!isAdmin) return { data: [], count: 0 };
     if (!checkConfig() || !supabase) return { data: [], count: 0 };
@@ -276,7 +276,7 @@ export async function getAllLogs(page = 1, limit = 20, search = "") {
     let query = supabase
         .from("attendance_logs")
         .select("*", { count: 'exact' })
-        .order("created_at", { ascending: false })
+        .order(sortBy, { ascending: sortOrder === 'asc' })
         .range(offset, offset + limit - 1);
 
     if (search) {
@@ -286,6 +286,37 @@ export async function getAllLogs(page = 1, limit = 20, search = "") {
     const { data, count } = await query;
     return { data: data || [], count: count || 0 };
 }
+
+export async function getAttendees(page = 1, limit = 20, search = "", sortBy = "created_at", sortOrder = "desc") {
+    const isAdmin = await checkAdminSession();
+    if (!isAdmin) return { data: [], count: 0 };
+    if (!checkConfig() || !supabase) return { data: [], count: 0 };
+
+    const offset = (page - 1) * limit;
+
+    // Use Foreign Table aggregation if possible, or just raw select
+    // Assuming 'attendance_logs' has foreign key to 'attendees'
+    let query = supabase
+        .from("attendees")
+        .select("*, attendance_logs(count)", { count: 'exact' })
+        .order(sortBy, { ascending: sortOrder === 'asc' })
+        .range(offset, offset + limit - 1);
+
+    if (search) {
+        query = query.or(`name.ilike.%${search}%,phone.ilike.%${search}%`);
+    }
+
+    const { data, count } = await query;
+
+    // Map to cleaner structure
+    const mapped = data?.map((d: any) => ({
+        ...d,
+        checkInCount: d.attendance_logs?.[0]?.count || 0
+    })) || [];
+
+    return { data: mapped, count: count || 0 };
+}
+
 
 export async function deleteLog(id: number) {
     const isAdmin = await checkAdminSession();
@@ -297,38 +328,132 @@ export async function deleteLog(id: number) {
         .delete()
         .eq("id", id);
 
-    return { success: !error, error: error?.message };
+
+    if (error) return { success: false, error: error.message };
+    return { success: true };
 }
 
-export async function getAttendanceRankings(limit = 10) {
+export async function deleteAttendee(id: string) {
+    const isAdmin = await checkAdminSession();
+    if (!isAdmin) return { success: false, error: "Unauthorized" };
+    if (!checkConfig() || !supabase) return { success: false, error: "Config error" };
+
+    // Delete logs first usually, unless CASCADE is set.
+    // Let's safe delete logs first.
+    const { error: logError } = await supabase
+        .from("attendance_logs")
+        .delete()
+        .eq("attendee_id", id);
+
+    if (logError) return { success: false, error: "로그 삭제 실패: " + logError.message };
+
+    const { error } = await supabase
+        .from("attendees")
+        .delete()
+        .eq("id", id);
+
+    if (error) return { success: false, error: error.message };
+    return { success: true };
+}
+
+export async function getAttendanceRankings(limit = 20, period: 'all' | 'month' = 'all', sortBy: 'count' | 'streak' = 'count') {
     const isAdmin = await checkAdminSession();
     if (!isAdmin) return [];
     if (!checkConfig() || !supabase) return [];
 
-    // Client-side aggregation (sufficient for small-medium church size)
-    // Fetch distinct name/phone pairs would be better, but we need counts.
-    // We'll fetch all logs (lightweight usually) or we should optimize if it grows large.
-    // For now, fetching 'name, phone' of all time is okay for < 10000 records.
+    let query = supabase.from("attendance_logs").select("name, phone, created_at");
 
-    const { data } = await supabase
-        .from("attendance_logs")
-        .select("name, phone");
+    // Filter by Period
+    const now = new Date();
+    if (period === 'month') {
+        const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+        query = query.gte('created_at', startOfMonth);
+    }
 
+    const { data } = await query;
     if (!data) return [];
 
-    const counts: { [key: string]: { name: string, phone: string, count: number } } = {};
+    // Aggregation & Streak Calculation
+    const stats: {
+        [key: string]: {
+            name: string,
+            phone: string,
+            count: number,
+            streak: number,
+            last_seen: string,
+            dates: Set<string>
+        }
+    } = {};
 
     data.forEach(row => {
         const key = `${row.name}-${row.phone}`;
-        if (!counts[key]) {
-            counts[key] = { name: row.name, phone: row.phone, count: 0 };
+        const dateObj = new Date(row.created_at);
+        // UTC+9 approx
+        const kstDate = new Date(dateObj.getTime() + (9 * 60 * 60 * 1000));
+        const dateStr = kstDate.toISOString().split('T')[0];
+
+        if (!stats[key]) {
+            stats[key] = {
+                name: row.name,
+                phone: row.phone,
+                count: 0,
+                streak: 0,
+                last_seen: row.created_at,
+                dates: new Set()
+            };
         }
-        counts[key].count++;
+
+        stats[key].count++;
+        stats[key].dates.add(dateStr);
+
+        if (new Date(row.created_at) > new Date(stats[key].last_seen)) {
+            stats[key].last_seen = row.created_at;
+        }
     });
 
-    return Object.values(counts)
-        .sort((a, b) => b.count - a.count)
-        .slice(0, limit);
+    // Streak Calculation
+    const today = new Date();
+    // UTC+9 approx today
+    const d = new Date(today.getTime() + (9 * 60 * 60 * 1000));
+
+    Object.values(stats).forEach(user => {
+        let streak = 0;
+        let loopDate = new Date(d); // Copy
+
+        const dStr = loopDate.toISOString().split('T')[0];
+        const yStr = new Date(loopDate.getTime() - 86400000).toISOString().split('T')[0];
+
+        if (user.dates.has(dStr)) {
+            // Started today
+        } else if (user.dates.has(yStr)) {
+            // Started yesterday
+            loopDate.setDate(loopDate.getDate() - 1);
+        } else {
+            user.streak = 0;
+            return;
+        }
+
+        while (true) {
+            const str = loopDate.toISOString().split('T')[0];
+            if (user.dates.has(str)) {
+                streak++;
+                loopDate.setDate(loopDate.getDate() - 1);
+            } else {
+                break;
+            }
+        }
+        user.streak = streak;
+    });
+
+    const result = Object.values(stats);
+
+    if (sortBy === 'streak') {
+        result.sort((a, b) => b.streak - a.streak || b.count - a.count);
+    } else {
+        result.sort((a, b) => b.count - a.count || b.streak - a.streak);
+    }
+
+    return result.slice(0, limit);
 }
 
 export async function getMonthlyStats(year: number, month: number) {
