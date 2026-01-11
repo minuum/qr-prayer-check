@@ -1,4 +1,4 @@
-```javascript
+
 "use client";
 
 import { useState, useEffect } from "react";
@@ -326,4 +326,3 @@ export default function CheckInPage() {
         </div>
     );
 }
-```
