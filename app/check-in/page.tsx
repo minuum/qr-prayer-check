@@ -1,10 +1,12 @@
+```javascript
 "use client";
 
 import { useState, useEffect } from "react";
-import { User, Phone, CheckCircle, Loader2, MapPin, Calendar as CalendarIcon, ClipboardCheck, ChevronLeft, ChevronRight } from "lucide-react";
+import { User, Phone, CheckCircle, Loader2, MapPin, Calendar as CalendarIcon, ClipboardCheck, ChevronLeft, ChevronRight, Home, RefreshCcw } from "lucide-react";
 import { checkIn, getUserAttendance } from "../actions";
 import { format, startOfMonth, endOfMonth, startOfWeek, endOfWeek, eachDayOfInterval, isSameMonth, isSameDay, addMonths, subMonths } from "date-fns";
 import confetti from "canvas-confetti";
+import Link from "next/link";
 import clsx from "clsx";
 
 export default function CheckInPage() {
@@ -63,7 +65,7 @@ export default function CheckInPage() {
                 const position = await new Promise<GeolocationPosition>((resolve, reject) => {
                     navigator.geolocation.getCurrentPosition(resolve, reject, {
                         enableHighAccuracy: true,
-                        timeout: 5000,
+                        timeout: 5000, // 5s timeout
                         maximumAge: 0
                     });
                 });
@@ -148,8 +150,13 @@ export default function CheckInPage() {
 
     if (status === "success" || status === "already") {
         return (
-            <div className="min-h-screen flex flex-col items-center justify-center p-6 text-center space-y-8 animate-in fade-in zoom-in duration-500">
-                <div className="relative">
+            <div className="min-h-screen flex flex-col items-center justify-center p-6 text-center space-y-8 animate-in fade-in zoom-in duration-500 relative">
+
+                <Link href="/" className="absolute top-6 left-6 text-slate-400 hover:text-white transition-colors">
+                    <Home className="w-6 h-6" />
+                </Link>
+
+                <div className="relative mt-8">
                     <div className="absolute inset-0 bg-primary/20 blur-xl rounded-full" />
                     <CheckCircle className="w-24 h-24 text-primary relative z-10" />
                 </div>
@@ -164,12 +171,32 @@ export default function CheckInPage() {
                     </p>
                 </div>
 
-                <button
-                    onClick={() => setStatus("idle")}
-                    className="text-sm text-slate-400 underline decoration-slate-600 underline-offset-4"
-                >
-                    돌아가기
-                </button>
+                <div className="p-4 bg-white/5 rounded-2xl border border-white/10 w-full max-w-sm space-y-1">
+                    <p className="text-sm text-slate-400">일시</p>
+                    <p className="text-lg font-mono text-emerald-400">
+                        {new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })}
+                    </p>
+                </div>
+
+                <div className="flex flex-col w-full max-w-xs gap-3 pt-4">
+                    <button
+                        onClick={() => {
+                            setStatus("idle");
+                            setTab("calendar");
+                            setLoading(false);
+                        }}
+                        className="w-full py-4 bg-white/10 hover:bg-white/20 rounded-xl font-bold flex items-center justify-center gap-2 transition-all"
+                    >
+                        <CalendarIcon className="w-4 h-4" /> 나의 출석부 확인
+                    </button>
+
+                    <Link
+                        href="/"
+                        className="w-full py-4 bg-transparent border border-white/20 text-slate-400 hover:text-white rounded-xl font-medium flex items-center justify-center gap-2 transition-all"
+                    >
+                        <Home className="w-4 h-4" /> 홈으로 이동
+                    </Link>
+                </div>
             </div>
         )
     }
@@ -177,7 +204,14 @@ export default function CheckInPage() {
     return (
         <div className="min-h-screen flex flex-col items-center p-6 max-w-md mx-auto relative font-[family-name:var(--font-geist-sans)]">
 
-            <div className="w-full text-center space-y-2 mt-8 mb-6">
+            {/* Top Navigation */}
+            <div className="w-full flex justify-between items-center mt-2 mb-6">
+                <Link href="/" className="p-2 -ml-2 text-slate-400 hover:text-white transition-colors">
+                    <ChevronLeft className="w-6 h-6" />
+                </Link>
+            </div>
+
+            <div className="w-full text-center space-y-2 mb-8">
                 <h1 className="text-3xl font-bold bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent">
                     2026 주중기도회
                 </h1>
@@ -292,3 +326,4 @@ export default function CheckInPage() {
         </div>
     );
 }
+```
