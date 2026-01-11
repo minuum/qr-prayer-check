@@ -3,9 +3,9 @@
 import { useEffect, useState } from "react";
 import { QRCodeCanvas } from "qrcode.react";
 import { motion, AnimatePresence } from "framer-motion";
-import { ArrowLeft, RefreshCw, Trash2, Lock, Printer, List, Link as LinkIcon, Download, Calendar as CalendarIcon, ChevronLeft, ChevronRight, Settings, MapPin, Power } from "lucide-react";
+import { ArrowLeft, RefreshCw, Trash2, Lock, Printer, List, Link as LinkIcon, Download, Calendar as CalendarIcon, ChevronLeft, ChevronRight, Settings, MapPin, Power, Database, Trophy, Search, Loader2 } from "lucide-react";
 import Link from "next/link";
-import { checkAdminSession, loginAdmin, logoutAdmin, getTodaysLogs, clearHistory, getMonthlyStats, getLogsByDate, getSystemSettings, updateSystemSetting } from "../actions";
+import { checkAdminSession, loginAdmin, logoutAdmin, getTodaysLogs, clearHistory, getMonthlyStats, getLogsByDate, getSystemSettings, updateSystemSetting, getAllLogs, getAttendanceRankings, deleteLog } from "../actions";
 import { format, startOfMonth, endOfMonth, startOfWeek, endOfWeek, eachDayOfInterval, isSameMonth, isSameDay, addMonths, subMonths } from "date-fns";
 import clsx from "clsx";
 
@@ -20,7 +20,7 @@ export default function AdminPage() {
     const [isAdmin, setIsAdmin] = useState(false);
     const [password, setPassword] = useState("");
     const [logs, setLogs] = useState<ScanRecord[]>([]);
-    const [tab, setTab] = useState<"dashboard" | "calendar" | "qr" | "settings">("dashboard");
+    const [tab, setTab] = useState<"dashboard" | "calendar" | "db" | "ranking" | "qr" | "settings">("dashboard");
     const [hostUrl, setHostUrl] = useState("");
 
     // Calendar State
@@ -32,6 +32,16 @@ export default function AdminPage() {
     // Settings State
     const [settings, setSettings] = useState<any>({});
     const [updatingSettings, setUpdatingSettings] = useState(false);
+
+    // DB State
+    const [dbLogs, setDbLogs] = useState<ScanRecord[]>([]);
+    const [dbCount, setDbCount] = useState(0);
+    const [dbPage, setDbPage] = useState(1);
+    const [dbSearch, setDbSearch] = useState("");
+    const [dbLoading, setDbLoading] = useState(false);
+
+    // Ranking State
+    const [rankings, setRankings] = useState<any[]>([]);
 
     useEffect(() => {
         checkAdminSession().then((valid) => {
@@ -49,6 +59,11 @@ export default function AdminPage() {
             setHostUrl(window.location.origin);
         }
     }, []);
+
+    useEffect(() => {
+        if (isAdmin && tab === "db") loadDbLogs();
+        if (isAdmin && tab === "ranking") loadRankings();
+    }, [isAdmin, tab, dbPage, dbSearch]);
 
     const handleLogin = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -73,6 +88,32 @@ export default function AdminPage() {
             created_at: new Date(d.created_at).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })
         }));
         setLogs(mapped);
+    }
+
+    const loadDbLogs = async () => {
+        setDbLoading(true);
+        const res = await getAllLogs(dbPage, 20, dbSearch);
+        const mapped = res.data.map((d: any) => ({
+            id: d.id,
+            name: d.name,
+            phone: d.phone,
+            created_at: new Date(d.created_at).toLocaleString('ko-KR')
+        }));
+        setDbLogs(mapped);
+        setDbCount(res.count);
+        setDbLoading(false);
+    }
+
+    const handleDeleteLog = async (id: number) => {
+        if (!confirm("이 기록을 삭제하시겠습니까? (복구 불가)")) return;
+        await deleteLog(id);
+        loadDbLogs(); // Refresh
+        loadLogs(); // Refresh dashboard too
+    }
+
+    const loadRankings = async () => {
+        const data = await getAttendanceRankings(20); // Top 20
+        setRankings(data);
     }
 
     const loadMonthlyStats = async (date: Date) => {
@@ -128,7 +169,7 @@ export default function AdminPage() {
     }
 
     const setLocation = async () => {
-        if (!confirm("현재 위치를 교회 위치로 설정하시겠습니까?\n이후 이 위치에서 반경 500m 이내만 출석이 허용됩니다.")) return;
+        if (!confirm("현재 위치를 교회 위치로 설정하시겠습니까?\n이후 이 위치에서 반경 200m 이내만 출석이 허용됩니다.")) return;
 
         setUpdatingSettings(true);
         if ("geolocation" in navigator) {
@@ -249,7 +290,7 @@ export default function AdminPage() {
             </div>
 
             {/* Tabs */}
-            <div className="flex w-full bg-white/5 p-1 rounded-xl mb-6 overflow-x-auto">
+            <div className="flex w-full bg-white/5 p-1 rounded-xl mb-6 overflow-x-auto no-scrollbar">
                 <button
                     onClick={() => setTab("dashboard")}
                     className={`flex-1 py-2 px-3 text-sm font-bold rounded-lg transition-all whitespace-nowrap ${tab === 'dashboard' ? 'bg-primary text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}
@@ -261,6 +302,18 @@ export default function AdminPage() {
                     className={`flex-1 py-2 px-3 text-sm font-bold rounded-lg transition-all whitespace-nowrap ${tab === 'calendar' ? 'bg-primary text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}
                 >
                     <CalendarIcon className="w-4 h-4 inline mr-2" /> 캘린더
+                </button>
+                <button
+                    onClick={() => setTab("db")}
+                    className={`flex-1 py-2 px-3 text-sm font-bold rounded-lg transition-all whitespace-nowrap ${tab === 'db' ? 'bg-primary text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}
+                >
+                    <Database className="w-4 h-4 inline mr-2" /> DB
+                </button>
+                <button
+                    onClick={() => setTab("ranking")}
+                    className={`flex-1 py-2 px-3 text-sm font-bold rounded-lg transition-all whitespace-nowrap ${tab === 'ranking' ? 'bg-primary text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}
+                >
+                    <Trophy className="w-4 h-4 inline mr-2" /> 순위
                 </button>
                 <button
                     onClick={() => setTab("qr")}
@@ -276,7 +329,9 @@ export default function AdminPage() {
                 </button>
             </div>
 
-            {tab === "dashboard" ? (
+            {/* --- Tab Content --- */}
+
+            {tab === "dashboard" && (
                 <div className="w-full space-y-4 animate-in fade-in duration-300">
                     <div className="flex justify-between items-center bg-white/5 p-6 rounded-3xl border border-white/10">
                         <div>
@@ -320,7 +375,9 @@ export default function AdminPage() {
                         </div>
                     </div>
                 </div>
-            ) : tab === "calendar" ? (
+            )}
+
+            {tab === "calendar" && (
                 <div className="w-full space-y-6 animate-in fade-in duration-300">
                     <div className="bg-white/5 rounded-3xl border border-white/10 p-6">
                         <div className="flex justify-between items-center mb-6">
@@ -363,74 +420,129 @@ export default function AdminPage() {
                         </div>
                     )}
                 </div>
-            ) : tab === "settings" ? (
-                <div className="w-full space-y-6 animate-in fade-in duration-300">
-                    {/* Check-in Toggle */}
-                    <div className="bg-white/5 rounded-3xl border border-white/10 p-6 flex items-center justify-between">
-                        <div>
-                            <h3 className="text-lg font-bold text-white flex items-center gap-2">
-                                <Power className="w-5 h-5 text-accent" /> 출석 시스템 상태
-                            </h3>
-                            <p className="text-sm text-slate-400 mt-1">
-                                {settings['session_active'] === 'false' ? '현재 출석이 비활성화됨' : '현재 출석 가능 상태'}
-                            </p>
+            )}
+
+            {tab === "db" && (
+                <div className="w-full space-y-4 animate-in fade-in duration-300">
+                    <div className="bg-white/5 p-4 rounded-2xl border border-white/10 flex gap-2">
+                        <Search className="w-5 h-5 text-slate-400 mt-2.5" />
+                        <input
+                            type="text"
+                            value={dbSearch}
+                            onChange={(e) => { setDbSearch(e.target.value); setDbPage(1); }}
+                            placeholder="이름이나 전화번호로 검색..."
+                            className="w-full bg-transparent border-none text-white focus:ring-0 placeholder:text-slate-600 outline-none p-2"
+                        />
+                    </div>
+
+                    <div className="bg-white/5 rounded-2xl border border-white/10 overflow-hidden min-h-[400px]">
+                        <div className="overflow-x-auto">
+                            <table className="w-full text-left text-sm whitespace-nowrap">
+                                <thead className="bg-white/5 text-slate-400 font-medium">
+                                    <tr>
+                                        <th className="p-4">날짜</th>
+                                        <th className="p-4">이름</th>
+                                        <th className="p-4">전화번호</th>
+                                        <th className="p-4 text-right">관리</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-white/5">
+                                    {dbLoading ? (
+                                        <tr><td colSpan={4} className="p-8 text-center text-slate-500"><Loader2 className="w-6 h-6 mx-auto animate-spin" /></td></tr>
+                                    ) : dbLogs.length === 0 ? (
+                                        <tr><td colSpan={4} className="p-8 text-center text-slate-500">데이터가 없습니다.</td></tr>
+                                    ) : (
+                                        dbLogs.map(log => (
+                                            <tr key={log.id} className="hover:bg-white/5 transition-colors">
+                                                <td className="p-4 text-slate-300">{log.created_at}</td>
+                                                <td className="p-4 font-bold text-white">{log.name}</td>
+                                                <td className="p-4 text-slate-400">{log.phone}</td>
+                                                <td className="p-4 text-right">
+                                                    <button onClick={() => handleDeleteLog(log.id)} className="text-slate-500 hover:text-red-400 p-2">
+                                                        <Trash2 className="w-4 h-4" />
+                                                    </button>
+                                                </td>
+                                            </tr>
+                                        ))
+                                    )}
+                                </tbody>
+                            </table>
                         </div>
+                    </div>
+
+                    <div className="flex justify-between items-center text-sm text-slate-400 px-2">
                         <button
-                            disabled={updatingSettings}
-                            onClick={toggleSession}
-                            className={clsx(
-                                "px-6 py-3 rounded-xl font-bold transition-all",
-                                settings['session_active'] === 'false' ? "bg-red-500/20 text-red-400 border border-red-500/50" : "bg-green-500/20 text-green-400 border border-green-500/50"
-                            )}
+                            disabled={dbPage === 1}
+                            onClick={() => setDbPage(p => Math.max(1, p - 1))}
+                            className="p-2 hover:text-white disabled:opacity-30"
                         >
-                            {settings['session_active'] === 'false' ? '꺼짐 (Closed)' : '켜짐 (Active)'}
+                            <ChevronLeft className="w-5 h-5" />
+                        </button>
+                        <span>{dbPage} / {Math.ceil(dbCount / 20) || 1} 페이지 (총 {dbCount}건)</span>
+                        <button
+                            disabled={dbPage >= Math.ceil(dbCount / 20)}
+                            onClick={() => setDbPage(p => p + 1)}
+                            className="p-2 hover:text-white disabled:opacity-30"
+                        >
+                            <ChevronRight className="w-5 h-5" />
                         </button>
                     </div>
+                </div>
+            )}
 
-                    {/* Location Setting */}
-                    <div className="bg-white/5 rounded-3xl border border-white/10 p-6 space-y-6">
-                        <div className="flex items-center gap-2 mb-2">
-                            <MapPin className="w-6 h-6 text-primary" />
-                            <h3 className="text-lg font-bold text-white">교회 위치 설정</h3>
+            {tab === "ranking" && (
+                <div className="w-full space-y-6 animate-in fade-in duration-300">
+                    <div className="bg-gradient-to-br from-yellow-500/20 to-amber-700/10 border border-yellow-500/20 p-6 rounded-3xl flex items-center gap-4">
+                        <div className="p-4 bg-yellow-500/20 rounded-full text-yellow-500">
+                            <Trophy className="w-8 h-8" />
                         </div>
-
-                        <p className="text-sm text-slate-400">
-                            부정 입력을 방지하기 위해 현재 위치를 교회 위치로 등록합니다.<br />
-                            등록되면 반경 500m 이내에서만 출석이 가능합니다.
-                        </p>
-
-                        <div className="p-4 bg-black/30 rounded-xl font-mono text-sm space-y-2">
-                            <div className="flex justify-between">
-                                <span className="text-slate-500">Latitude</span>
-                                <span className="text-white">{settings['church_lat'] || '설정안됨'}</span>
-                            </div>
-                            <div className="flex justify-between">
-                                <span className="text-slate-500">Longitude</span>
-                                <span className="text-white">{settings['church_lng'] || '설정안됨'}</span>
-                            </div>
-                        </div>
-
-                        <div className="flex gap-2">
-                            <button
-                                onClick={setLocation}
-                                disabled={updatingSettings}
-                                className="flex-1 bg-primary text-white font-bold py-3 rounded-xl hover:bg-primary/90 transition-all"
-                            >
-                                현재 위치로 설정
-                            </button>
-                            {settings['church_lat'] && (
-                                <button
-                                    onClick={clearLocation}
-                                    disabled={updatingSettings}
-                                    className="bg-white/10 text-slate-300 font-bold px-4 rounded-xl hover:bg-white/20 transition-all"
-                                >
-                                    <Trash2 className="w-5 h-5" />
-                                </button>
-                            )}
+                        <div>
+                            <h2 className="text-xl font-bold text-white">출석 명예의 전당</h2>
+                            <p className="text-slate-400 text-sm">가장 많이 참석하신 분들을 소개합니다</p>
                         </div>
                     </div>
+
+                    <div className="grid gap-3">
+                        {rankings.map((user, idx) => (
+                            <motion.div
+                                initial={{ opacity: 0, scale: 0.95 }}
+                                animate={{ opacity: 1, scale: 1 }}
+                                transition={{ delay: idx * 0.05 }}
+                                key={`${user.name}-${user.phone}`}
+                                className={clsx(
+                                    "flex items-center justify-between p-4 rounded-2xl border",
+                                    idx === 0 ? "bg-gradient-to-r from-yellow-500/10 to-transparent border-yellow-500/30" :
+                                        idx === 1 ? "bg-gradient-to-r from-slate-400/10 to-transparent border-slate-400/30" :
+                                            idx === 2 ? "bg-gradient-to-r from-amber-700/10 to-transparent border-amber-700/30" :
+                                                "bg-white/5 border-white/5"
+                                )}
+                            >
+                                <div className="flex items-center gap-4">
+                                    <div className={clsx(
+                                        "w-8 h-8 flex items-center justify-center font-black rounded-lg",
+                                        idx === 0 ? "text-yellow-400 bg-yellow-400/10" :
+                                            idx === 1 ? "text-slate-300 bg-slate-400/10" :
+                                                idx === 2 ? "text-amber-600 bg-amber-700/10" :
+                                                    "text-slate-500 bg-white/5"
+                                    )}>
+                                        {idx + 1}
+                                    </div>
+                                    <div>
+                                        <p className="font-bold text-white text-lg">{user.name}</p>
+                                        <p className="text-xs text-slate-500">{user.phone}</p>
+                                    </div>
+                                </div>
+                                <div className="text-right">
+                                    <span className="text-2xl font-black text-white">{user.count}</span>
+                                    <span className="text-xs text-slate-500 ml-1">회</span>
+                                </div>
+                            </motion.div>
+                        ))}
+                    </div>
                 </div>
-            ) : (
+            )}
+
+            {tab === "qr" && (
                 <div className="w-full space-y-6 animate-in fade-in duration-300">
                     <div className="bg-white p-8 rounded-3xl border border-white/10 text-center space-y-6 shadow-2xl">
                         <h2 className="text-2xl font-bold text-black mb-2">2026 주중기도회 출석체크</h2>
@@ -478,6 +590,76 @@ export default function AdminPage() {
                     </p>
                 </div>
             )}
+
+            {tab === "settings" && (
+                <div className="w-full space-y-6 animate-in fade-in duration-300">
+                    {/* Check-in Toggle */}
+                    <div className="bg-white/5 rounded-3xl border border-white/10 p-6 flex items-center justify-between">
+                        <div>
+                            <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                                <Power className="w-5 h-5 text-accent" /> 출석 시스템 상태
+                            </h3>
+                            <p className="text-sm text-slate-400 mt-1">
+                                {settings['session_active'] === 'false' ? '현재 출석이 비활성화됨' : '현재 출석 가능 상태'}
+                            </p>
+                        </div>
+                        <button
+                            disabled={updatingSettings}
+                            onClick={toggleSession}
+                            className={clsx(
+                                "px-6 py-3 rounded-xl font-bold transition-all",
+                                settings['session_active'] === 'false' ? "bg-red-500/20 text-red-400 border border-red-500/50" : "bg-green-500/20 text-green-400 border border-green-500/50"
+                            )}
+                        >
+                            {settings['session_active'] === 'false' ? '꺼짐 (Closed)' : '켜짐 (Active)'}
+                        </button>
+                    </div>
+
+                    {/* Location Setting */}
+                    <div className="bg-white/5 rounded-3xl border border-white/10 p-6 space-y-6">
+                        <div className="flex items-center gap-2 mb-2">
+                            <MapPin className="w-6 h-6 text-primary" />
+                            <h3 className="text-lg font-bold text-white">교회 위치 설정</h3>
+                        </div>
+
+                        <p className="text-sm text-slate-400">
+                            부정 입력을 방지하기 위해 현재 위치를 교회 위치로 등록합니다.<br />
+                            등록되면 반경 200m 이내에서만 출석이 가능합니다.
+                        </p>
+
+                        <div className="p-4 bg-black/30 rounded-xl font-mono text-sm space-y-2">
+                            <div className="flex justify-between">
+                                <span className="text-slate-500">Latitude</span>
+                                <span className="text-white">{settings['church_lat'] || '설정안됨'}</span>
+                            </div>
+                            <div className="flex justify-between">
+                                <span className="text-slate-500">Longitude</span>
+                                <span className="text-white">{settings['church_lng'] || '설정안됨'}</span>
+                            </div>
+                        </div>
+
+                        <div className="flex gap-2">
+                            <button
+                                onClick={setLocation}
+                                disabled={updatingSettings}
+                                className="flex-1 bg-primary text-white font-bold py-3 rounded-xl hover:bg-primary/90 transition-all"
+                            >
+                                현재 위치로 설정
+                            </button>
+                            {settings['church_lat'] && (
+                                <button
+                                    onClick={clearLocation}
+                                    disabled={updatingSettings}
+                                    className="bg-white/10 text-slate-300 font-bold px-4 rounded-xl hover:bg-white/20 transition-all"
+                                >
+                                    <Trash2 className="w-5 h-5" />
+                                </button>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            )}
+
         </div>
     );
 }

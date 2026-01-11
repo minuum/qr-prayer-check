@@ -266,6 +266,71 @@ export async function getTodaysLogs() {
     return data || [];
 }
 
+export async function getAllLogs(page = 1, limit = 20, search = "") {
+    const isAdmin = await checkAdminSession();
+    if (!isAdmin) return { data: [], count: 0 };
+    if (!checkConfig() || !supabase) return { data: [], count: 0 };
+
+    const offset = (page - 1) * limit;
+
+    let query = supabase
+        .from("attendance_logs")
+        .select("*", { count: 'exact' })
+        .order("created_at", { ascending: false })
+        .range(offset, offset + limit - 1);
+
+    if (search) {
+        query = query.or(`name.ilike.%${search}%,phone.ilike.%${search}%`);
+    }
+
+    const { data, count } = await query;
+    return { data: data || [], count: count || 0 };
+}
+
+export async function deleteLog(id: number) {
+    const isAdmin = await checkAdminSession();
+    if (!isAdmin) return { success: false, error: "Unauthorized" };
+    if (!checkConfig() || !supabase) return { success: false, error: "Config error" };
+
+    const { error } = await supabase
+        .from("attendance_logs")
+        .delete()
+        .eq("id", id);
+
+    return { success: !error, error: error?.message };
+}
+
+export async function getAttendanceRankings(limit = 10) {
+    const isAdmin = await checkAdminSession();
+    if (!isAdmin) return [];
+    if (!checkConfig() || !supabase) return [];
+
+    // Client-side aggregation (sufficient for small-medium church size)
+    // Fetch distinct name/phone pairs would be better, but we need counts.
+    // We'll fetch all logs (lightweight usually) or we should optimize if it grows large.
+    // For now, fetching 'name, phone' of all time is okay for < 10000 records.
+
+    const { data } = await supabase
+        .from("attendance_logs")
+        .select("name, phone");
+
+    if (!data) return [];
+
+    const counts: { [key: string]: { name: string, phone: string, count: number } } = {};
+
+    data.forEach(row => {
+        const key = `${row.name}-${row.phone}`;
+        if (!counts[key]) {
+            counts[key] = { name: row.name, phone: row.phone, count: 0 };
+        }
+        counts[key].count++;
+    });
+
+    return Object.values(counts)
+        .sort((a, b) => b.count - a.count)
+        .slice(0, limit);
+}
+
 export async function getMonthlyStats(year: number, month: number) {
     const isAdmin = await checkAdminSession();
     if (!isAdmin) return {};
