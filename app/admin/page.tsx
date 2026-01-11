@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { QRCodeCanvas } from "qrcode.react";
 import { motion, AnimatePresence } from "framer-motion";
-import { ArrowLeft, RefreshCw, Trash2, Lock, Printer, List, Link as LinkIcon, Download, Calendar as CalendarIcon, ChevronLeft, ChevronRight, Settings, MapPin, Power, Database, Trophy, Search, Loader2 } from "lucide-react";
+import { ArrowLeft, RefreshCw, Trash2, Lock, Printer, List, Link as LinkIcon, Download, Calendar as CalendarIcon, ChevronLeft, ChevronRight, Settings, MapPin, Power, Database, Trophy, Search, Loader2, BookOpen } from "lucide-react";
 import Link from "next/link";
 import { checkAdminSession, loginAdmin, logoutAdmin, getTodaysLogs, clearHistory, getMonthlyStats, getLogsByDate, getSystemSettings, updateSystemSetting, getAllLogs, getAttendanceRankings, deleteLog, getAttendees, deleteAttendee } from "../actions";
 import { format, startOfMonth, endOfMonth, startOfWeek, endOfWeek, eachDayOfInterval, isSameMonth, isSameDay, addMonths, subMonths } from "date-fns";
@@ -28,7 +28,7 @@ export default function AdminPage() {
     const [isAdmin, setIsAdmin] = useState(false);
     const [password, setPassword] = useState("");
     const [logs, setLogs] = useState<ScanRecord[]>([]);
-    const [tab, setTab] = useState<"dashboard" | "calendar" | "db" | "ranking" | "qr" | "settings">("dashboard");
+    const [tab, setTab] = useState<"dashboard" | "calendar" | "db" | "ranking" | "qr" | "settings" | "guide">("dashboard");
     const [hostUrl, setHostUrl] = useState("");
 
     // Calendar State
@@ -410,9 +410,64 @@ export default function AdminPage() {
                 >
                     <Settings className="w-4 h-4 inline mr-2" /> 설정
                 </button>
+                <button
+                    onClick={() => setTab("guide")}
+                    className={`flex-1 py-2 px-3 text-sm font-bold rounded-lg transition-all whitespace-nowrap ${tab === 'guide' ? 'bg-primary text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}
+                >
+                    <BookOpen className="w-4 h-4 inline mr-2" /> 가이드
+                </button>
             </div>
 
             {/* --- Tab Content --- */}
+
+            {tab === "guide" && (
+                <div className="w-full space-y-6 animate-in fade-in duration-300">
+                    <div className="bg-gradient-to-br from-indigo-500/20 to-purple-600/10 border border-indigo-500/20 p-6 rounded-3xl flex items-center gap-4 shadow-lg">
+                        <div className="p-4 bg-indigo-500/20 rounded-full text-indigo-400">
+                            <BookOpen className="w-8 h-8" />
+                        </div>
+                        <div>
+                            <h2 className="text-xl font-bold text-white">관리자 이용 가이드</h2>
+                            <p className="text-slate-400 text-sm">시스템 사용법을 간단히 확인하세요</p>
+                        </div>
+                    </div>
+
+                    <div className="space-y-4">
+                        <div className="bg-white/5 border border-white/10 p-5 rounded-2xl">
+                            <h3 className="text-lg font-bold text-white mb-2 flex items-center gap-2">
+                                <span className="bg-primary/20 text-primary w-6 h-6 rounded-full flex items-center justify-center text-xs">1</span>
+                                QR 코드로 출석하기
+                            </h3>
+                            <p className="text-slate-400 text-sm leading-relaxed">
+                                'QR' 탭에서 생성된 코드를 인쇄하거나 화면에 띄워주세요.<br />
+                                교인들은 폰으로 QR을 찍어 <span className="text-white font-bold">이름과 전화번호 뒷자리</span>만 입력하면 출석이 완료됩니다.
+                            </p>
+                        </div>
+
+                        <div className="bg-white/5 border border-white/10 p-5 rounded-2xl">
+                            <h3 className="text-lg font-bold text-white mb-2 flex items-center gap-2">
+                                <span className="bg-primary/20 text-primary w-6 h-6 rounded-full flex items-center justify-center text-xs">2</span>
+                                위치 제한 설정 (선택)
+                            </h3>
+                            <p className="text-slate-400 text-sm leading-relaxed">
+                                '설정' 탭에서 <span className="text-white font-bold">교회 위치 설정</span>을 누르면, 현재 관리계정이 있는 곳을 교회 위치로 저장합니다.
+                                이후 반경 200m 이내에서만 출석이 가능해집니다.
+                            </p>
+                        </div>
+
+                        <div className="bg-white/5 border border-white/10 p-5 rounded-2xl">
+                            <h3 className="text-lg font-bold text-white mb-2 flex items-center gap-2">
+                                <span className="bg-primary/20 text-primary w-6 h-6 rounded-full flex items-center justify-center text-xs">3</span>
+                                데이터 관리 및 엑셀 저장
+                            </h3>
+                            <p className="text-slate-400 text-sm leading-relaxed">
+                                'DB' 탭에서 <span className="text-white font-bold">출석 로그</span>와 <span className="text-white font-bold">등록 교인</span> 명단을 볼 수 있습니다.<br />
+                                <Download className="w-4 h-4 inline mx-1" /> 버튼을 눌러 데이터를 엑셀(CSV) 파일로 다운로드하여 관리하세요.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {tab === "dashboard" && (
                 <div className="w-full space-y-4 animate-in fade-in duration-300">
