@@ -17,7 +17,7 @@ export default function CheckInPage() {
     const [msg, setMsg] = useState("");
     const [locating, setLocating] = useState(false);
 
-    const [tab, setTab] = useState<"checkin" | "calendar">("checkin");
+    const [tab, setTab] = useState<"checkin" | "calendar" | "profile">("checkin");
     const [attendedDates, setAttendedDates] = useState<string[]>([]);
     const [currentDate, setCurrentDate] = useState(new Date());
 
@@ -227,7 +227,7 @@ export default function CheckInPage() {
                         tab === 'checkin' ? 'bg-primary text-white shadow-lg' : 'text-slate-400 hover:text-white'
                     )}
                 >
-                    <ClipboardCheck className="w-4 h-4" /> 출석체크
+                    <ClipboardCheck className="w-4 h-4" /> 출석
                 </button>
                 <button
                     onClick={() => setTab("calendar")}
@@ -236,11 +236,28 @@ export default function CheckInPage() {
                         tab === 'calendar' ? 'bg-primary text-white shadow-lg' : 'text-slate-400 hover:text-white'
                     )}
                 >
-                    <CalendarIcon className="w-4 h-4" /> 나의 출석부
+                    <CalendarIcon className="w-4 h-4" /> 달력
+                </button>
+                <button
+                    onClick={() => setTab("profile")}
+                    className={clsx(
+                        "flex-1 py-3 text-sm font-bold rounded-xl transition-all flex items-center justify-center gap-2",
+                        tab === 'profile' ? 'bg-primary text-white shadow-lg' : 'text-slate-400 hover:text-white'
+                    )}
+                >
+                    <User className="w-4 h-4" /> 내 정보
                 </button>
             </div>
 
-            {tab === "checkin" ? (
+            {/* Guide Section (Always visible at bottom or separate tab? Request asked for Guide AND Member Info. Let's put Guide in Profile or separate? Space is tight on mobile. Let's add small help icon or just a dedicated Guide tab? 4 tabs is a lot. Let's merge Guide into Profile or make it a small link?
+            User said "Web guide... simple explanation... Guide tab".
+            Let's add 4th tab "Guide"? Or just 3 tabs and Profile has Guide?
+            "회원 페이지에도 가이드 추가해주고" -> Add Guide to member page.
+            "회원 정보도 추가할 수 있도록 해줘" -> Allow adding info.
+            Let's try 3 tabs: Check-in / Calendar / Profile(Info+Guide).
+            */}
+
+            {tab === "checkin" && (
                 <div className="w-full space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
                     <form onSubmit={handleSubmit} className="space-y-6">
                         <div className="space-y-4">
@@ -292,12 +309,21 @@ export default function CheckInPage() {
                         </button>
                     </form>
 
-                    <p className="text-center text-xs text-slate-600">
-                        * 부정 출석 방지를 위해 위치 정보를 확인합니다.<br />
-                        브라우저가 위치 권한을 요청하면 <span className="text-primary font-bold">'허용'</span>해 주세요.
-                    </p>
+                    <div className="bg-white/5 rounded-2xl p-4 border border-white/10">
+                        <h3 className="text-sm font-bold text-white mb-2 flex items-center gap-2">
+                            <ClipboardCheck className="w-4 h-4 text-primary" /> 간단 이용 가이드
+                        </h3>
+                        <ul className="text-xs text-slate-400 space-y-1 list-disc list-inside">
+                            <li>이름과 전화번호 뒷 4자리를 입력하세요.</li>
+                            <li><span className="text-primary">위치 권한</span>을 반드시 허용해야 합니다.</li>
+                            <li>교회 반경 200m 이내에서만 출석이 인정됩니다.</li>
+                            <li>'내 정보' 탭에서 정보를 수정하거나 로그아웃 할 수 있습니다.</li>
+                        </ul>
+                    </div>
                 </div>
-            ) : (
+            )}
+
+            {tab === "calendar" && (
                 <div className="w-full space-y-6 animate-in fade-in slide-in-from-right-4 duration-500">
                     {(!name || !phone) ? (
                         <div className="text-center py-12 text-slate-500 bg-white/5 rounded-3xl border border-white/10">
@@ -320,6 +346,51 @@ export default function CheckInPage() {
                             <CalendarGrid />
                         </div>
                     )}
+                </div>
+            )}
+
+            {tab === "profile" && (
+                <div className="w-full space-y-6 animate-in fade-in slide-in-from-right-4 duration-500">
+                    <div className="bg-white/5 rounded-3xl border border-white/10 p-8 text-center space-y-4">
+                        <div className="w-20 h-20 bg-gradient-to-br from-primary to-violet-600 rounded-full mx-auto flex items-center justify-center shadow-lg shadow-primary/20">
+                            <User className="w-10 h-10 text-white" />
+                        </div>
+
+                        {name && phone ? (
+                            <div>
+                                <h2 className="text-2xl font-bold text-white mb-1">{name}님</h2>
+                                <p className="text-slate-400">{phone}</p>
+                            </div>
+                        ) : (
+                            <p className="text-slate-500">정보가 등록되지 않았습니다.</p>
+                        )}
+
+                        {name && phone && (
+                            <button
+                                onClick={() => {
+                                    if (confirm("정보를 초기화하시겠습니까? 다시 입력해야 합니다.")) {
+                                        localStorage.removeItem("user_info");
+                                        setName("");
+                                        setPhone("");
+                                        setTab("checkin");
+                                    }
+                                }}
+                                className="text-sm text-red-400 hover:text-red-300 underline decoration-red-400/30 underline-offset-4"
+                            >
+                                정보 초기화 (로그아웃)
+                            </button>
+                        )}
+                    </div>
+
+                    <div className="bg-white/5 rounded-2xl p-5 border border-white/10 space-y-3">
+                        <h3 className="font-bold text-white flex items-center gap-2">
+                            <RefreshCcw className="w-4 h-4 text-slate-400" /> 정보 수정 안내
+                        </h3>
+                        <p className="text-sm text-slate-400 leading-relaxed">
+                            이름이나 전화번호를 잘못 입력하셨나요?<br />
+                            위의 <span className="text-red-400 font-bold">'정보 초기화'</span> 버튼을 누르면 기기에 저장된 정보가 삭제되어 다시 입력할 수 있습니다.
+                        </p>
+                    </div>
                 </div>
             )}
 
