@@ -44,18 +44,76 @@ export async function logoutAdmin() {
     return { success: true };
 }
 
+// --- System Settings ---
+
+export async function getSystemSettings() {
+    if (!checkConfig() || !supabase) return {};
+
+    const { data } = await supabase.from("system_settings").select("*");
+    const settings: any = {};
+
+    if (data) {
+        data.forEach(row => {
+            settings[row.key] = row.value;
+        });
+    }
+    return settings;
+}
+
+export async function updateSystemSetting(key: string, value: string) {
+    const isAdmin = await checkAdminSession();
+    if (!isAdmin) return { success: false, error: "Unauthorized" };
+    if (!checkConfig() || !supabase) return { success: false };
+
+    const { error } = await supabase
+        .from("system_settings")
+        .upsert({ key, value });
+
+    if (error) return { success: false, error: error.message };
+    return { success: true };
+}
+
 // --- Check-In (User Side) ---
 
-export async function checkIn(name: string, phone: string) {
+import { getDistance } from 'geolib';
+
+export async function checkIn(name: string, phone: string, userLat?: number, userLng?: number) {
     if (!checkConfig() || !supabase) {
-        return { success: false, error: "서버 DB 설정이 되지 않았습니다. 관리자에게 문의하세요." };
+        return { success: false, error: "서버 DB 설정 오류" };
     }
 
-    // 1. Ensure User Exists (Upsert)
-    // We try to find existing user first to get stable UUID if needed, or just insert.
-    // Upsert relies on unique constraint (name, phone).
+    // 1. Fetch Settings (Session & Location)
+    const settings = await getSystemSettings();
 
-    // First, try to select
+    // Check if session is active (default to true if not set, or false? Let's default true for ease unless set)
+    // Actually, user wants "session changes". Let's enforce session active.
+    if (settings['session_active'] === 'false') {
+        return { success: false, error: "현재 출석체크 시간이 아닙니다." };
+    }
+
+    // 2. Validate Location (if configured)
+    if (settings['church_lat'] && settings['church_lng'] && userLat && userLng) {
+        const churchLat = parseFloat(settings['church_lat']);
+        const churchLng = parseFloat(settings['church_lng']);
+
+        const distance = getDistance(
+            { latitude: userLat, longitude: userLng },
+            { latitude: churchLat, longitude: churchLng }
+        );
+
+        // 200m radius as requested
+        if (distance > 200) {
+            return {
+                success: false,
+                error: `교회 반경 200m 이내에서만 출석이 가능합니다. (현재 거리: ${distance}m)`
+            };
+        }
+    } else if ((settings['church_lat'] || settings['church_lng']) && (!userLat || !userLng)) {
+        // Church location is set, but user didn't provide location
+        return { success: false, error: "위치 정보를 허용해야 출석할 수 있습니다." };
+    }
+
+    // 3. Ensure User Exists
     let attendeeId: string | null = null;
 
     const { data: existing } = await supabase
@@ -75,17 +133,12 @@ export async function checkIn(name: string, phone: string) {
             .single();
 
         if (error || !created) {
-            console.error("Create error:", error);
             return { success: false, error: "사용자 등록 실패" };
         }
         attendeeId = created.id;
     }
 
-    // 2. Log Attendance
-    // Prevent duplicate check-in within short time (e.g. 1 hour) ? 
-    // For simplicity, we just log. The admin view can filter duplicates or we can check recent log.
-
-    // Check recent log (last 1 hour)
+    // 4. Log Attendance (Duplication Check)
     const { data: recent } = await supabase
         .from("attendance_logs")
         .select("created_at")
@@ -97,8 +150,9 @@ export async function checkIn(name: string, phone: string) {
     if (recent) {
         const lastTime = new Date(recent.created_at).getTime();
         const now = Date.now();
-        if (now - lastTime < 60 * 60 * 1000) { // 1 hour
-            return { success: true, message: "이미 출석체크 되었습니다.", alreadyChecked: true };
+        // 12 hours cool-down to represent "one session per day" roughly
+        if (now - lastTime < 12 * 60 * 60 * 1000) {
+            return { success: true, message: "이미 오늘 출석하셨습니다.", alreadyChecked: true };
         }
     }
 
@@ -115,6 +169,35 @@ export async function checkIn(name: string, phone: string) {
 }
 
 
+// --- User Actions ---
+
+export async function getUserAttendance(name: string, phone: string, year: number, month: number) {
+    if (!checkConfig() || !supabase) return [];
+
+    const startDate = new Date(year, month - 1, 1).toISOString();
+    const endDate = new Date(year, month, 0, 23, 59, 59).toISOString();
+
+    const { data } = await supabase
+        .from("attendance_logs")
+        .select("created_at")
+        .eq("name", name)
+        .eq("phone", phone)
+        .gte("created_at", startDate)
+        .lte("created_at", endDate);
+
+    // Return array of date strings (YYYY-MM-DD)
+    const attendedDates: string[] = [];
+    if (data) {
+        data.forEach((log) => {
+            const kstDate = new Date(log.created_at).toLocaleDateString('en-CA', { timeZone: 'Asia/Seoul' });
+            if (!attendedDates.includes(kstDate)) {
+                attendedDates.push(kstDate);
+            }
+        });
+    }
+    return attendedDates;
+}
+
 // --- Admin Actions ---
 
 export async function getTodaysLogs() {
@@ -130,6 +213,66 @@ export async function getTodaysLogs() {
         .select("*")
         .order("created_at", { ascending: false })
         .limit(100);
+
+    return data || [];
+}
+
+export async function getMonthlyStats(year: number, month: number) {
+    const isAdmin = await checkAdminSession();
+    if (!isAdmin) return {};
+    if (!checkConfig() || !supabase) return {};
+
+    const startDate = new Date(year, month - 1, 1).toISOString();
+    const endDate = new Date(year, month, 0, 23, 59, 59).toISOString();
+
+    const { data } = await supabase
+        .from("attendance_logs")
+        .select("created_at")
+        .gte("created_at", startDate)
+        .lte("created_at", endDate);
+
+    // Group by date (YYYY-MM-DD)
+    const stats: { [key: string]: number } = {};
+    if (data) {
+        data.forEach((log) => {
+            // Convert UTC to KST date string
+            const kstDate = new Date(log.created_at).toLocaleDateString('en-CA', { timeZone: 'Asia/Seoul' });
+            stats[kstDate] = (stats[kstDate] || 0) + 1;
+        });
+    }
+    return stats;
+}
+
+export async function getLogsByDate(dateStr: string) {
+    const isAdmin = await checkAdminSession();
+    if (!isAdmin) return [];
+    if (!checkConfig() || !supabase) return [];
+
+    // dateStr is YYYY-MM-DD (KST)
+    // We need to cover the full UTC range for that KST day.
+    // Simplest: query range with ample buffer or precise calculation.
+    // KST is UTC+9. 
+    // 2026-01-11 00:00 KST = 2026-01-10 15:00 UTC
+    // 2026-01-11 23:59 KST = 2026-01-11 14:59 UTC
+
+    // Instead of complex TZ math on server actions without libraries, 
+    // let's fetch a slightly wider range and filter in code if needed, 
+    // or trust Postgres Timezone if configured. Supabase saves as Timestamptz.
+
+    // Let's use simple string matching on "YYYY-MM-DD" if we fetch ample data? 
+    // No, pagination/performance matters.
+
+    // Let's rely on client date string. 
+    // "2026-01-11"
+    const startObj = new Date(dateStr + "T00:00:00+09:00");
+    const endObj = new Date(dateStr + "T23:59:59+09:00");
+
+    const { data } = await supabase
+        .from("attendance_logs")
+        .select("*")
+        .gte("created_at", startObj.toISOString())
+        .lte("created_at", endObj.toISOString())
+        .order("created_at", { ascending: true });
 
     return data || [];
 }
