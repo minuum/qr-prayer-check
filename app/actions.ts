@@ -198,6 +198,55 @@ export async function getUserAttendance(name: string, phone: string, year: numbe
     return attendedDates;
 }
 
+// --- Public Dashboard Actions ---
+
+export async function getPublicStats() {
+    if (!checkConfig() || !supabase) return { todayCount: 0, monthlyStats: {} };
+
+    // Today's count
+    const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Seoul' });
+    const todayStart = todayStr + "T00:00:00";
+    const todayEnd = todayStr + "T23:59:59";
+
+    const { count } = await supabase
+        .from("attendance_logs")
+        .select("*", { count: 'exact', head: true })
+        .gte("created_at", todayStart)
+        .lte("created_at", todayEnd);
+
+    // Monthly stats for calendar heatmap
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = now.getMonth() + 1;
+    const monthlyStats = await getMonthlyStats(year, month);
+
+    return {
+        todayCount: count || 0,
+        monthlyStats: monthlyStats
+    };
+}
+
+export async function getDailyVerse() {
+    const today = new Date().getDate();
+    // Simple rotation of 31 verses
+    const verses = [
+        { text: "너는 기도할 때에 네 골방에 들어가 문을 닫고 은밀한 중에 계신 네 아버지께 기도하라", addr: "마태복음 6:6" },
+        { text: "아무 것도 염려하지 말고 다만 모든 일에 기도와 간구로, 너희 구할 것을 감사함으로 하나님께 아뢰라", addr: "빌립보서 4:6" },
+        { text: "구하라 그리하면 너희에게 주실 것이요 찾으라 그리하면 찾아낼 것이요 문을 두드리라 그리하면 너희에게 열릴 것이니", addr: "마태복음 7:7" },
+        { text: "쉬지 말고 기도하라 범사에 감사하라 이것이 그리스도 예수 안에서 너희를 향하신 하나님의 뜻이니라", addr: "데살로니가전서 5:17-18" },
+        { text: "너희가 내 안에 거하고 내 말이 너희 안에 거하면 무엇이든지 원하는 대로 구하라 그리하면 이루리라", addr: "요한복음 15:7" },
+        { text: "일을 행하시는 여호와, 그것을 만들며 성취하시는 여호와... 너는 내게 부르짖으라 내가 네게 응답하겠고", addr: "예레미야 33:2-3" },
+        { text: "의인의 간구는 역사하는 힘이 큼이니라", addr: "야고보서 5:16" },
+        { text: "새벽 아직도 밝기 전에 예수께서 일어나 나가 한적한 곳으로 가사 거기서 기도하시더니", addr: "마가복음 1:35" },
+        { text: "기도를 계속하고 기도에 감사함으로 깨어 있으라", addr: "골로새서 4:2" },
+        { text: "여호와께 바라는 너희들아 강하고 담대하라", addr: "시편 31:24" },
+        // ... more verses can be added. Repeating list if day > length
+    ];
+
+    const index = (today - 1) % verses.length;
+    return verses[index];
+}
+
 // --- Admin Actions ---
 
 export async function getTodaysLogs() {
