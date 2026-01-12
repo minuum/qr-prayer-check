@@ -254,14 +254,17 @@ export async function getTodaysLogs() {
     if (!isAdmin) return [];
     if (!checkConfig() || !supabase) return [];
 
-    // Get logs from today (KST approx) or just last 24h
-    // Simple approach: standard updated_at order descending
+    // Calculate Today's Range in KST
+    const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Seoul' });
+    const startObj = new Date(todayStr + "T00:00:00+09:00");
+    const endObj = new Date(todayStr + "T23:59:59+09:00");
 
     const { data } = await supabase
         .from("attendance_logs")
         .select("*")
-        .order("created_at", { ascending: false })
-        .limit(100);
+        .gte("created_at", startObj.toISOString())
+        .lte("created_at", endObj.toISOString())
+        .order("created_at", { ascending: false });
 
     return data || [];
 }
@@ -526,5 +529,59 @@ export async function clearHistory() {
     if (error) return { success: false, error: error.message };
 
     revalidatePath("/admin");
+    return { success: true };
+}
+
+// --- Schedule Management ---
+
+export async function getSchedules(year: number, month: number) {
+    if (!checkConfig() || !supabase) return [];
+
+    const startDate = new Date(year, month - 1, 1).toISOString();
+    const endDate = new Date(year, month, 0, 23, 59, 59).toISOString();
+
+    const { data } = await supabase
+        .from("schedules")
+        .select("*")
+        .gte("date", startDate)
+        .lte("date", endDate)
+        .order("date", { ascending: true });
+
+    return data || [];
+}
+
+export async function addSchedule(title: string, dateStr: string, type: string = 'primary') {
+    const isAdmin = await checkAdminSession();
+    if (!isAdmin) return { success: false, error: "Unauthorized" };
+    if (!checkConfig() || !supabase) return { success: false, error: "Config error" };
+
+    // dateStr expected as YYYY-MM-DD
+    // Store as Noon KST to avoid boundary shifts? Or just UTC 00:00 of that day?
+    // Let's store as provided date T00:00:00 KST approx.
+    const dateObj = new Date(dateStr + "T00:00:00+09:00");
+
+    const { error } = await supabase
+        .from("schedules")
+        .insert([{ title, date: dateObj.toISOString(), type }]);
+
+    if (error) return { success: false, error: error.message };
+
+    revalidatePath("/"); // Update main page
+    return { success: true };
+}
+
+export async function deleteSchedule(id: number) {
+    const isAdmin = await checkAdminSession();
+    if (!isAdmin) return { success: false, error: "Unauthorized" };
+    if (!checkConfig() || !supabase) return { success: false, error: "Config error" };
+
+    const { error } = await supabase
+        .from("schedules")
+        .delete()
+        .eq("id", id);
+
+    if (error) return { success: false, error: error.message };
+
+    revalidatePath("/");
     return { success: true };
 }

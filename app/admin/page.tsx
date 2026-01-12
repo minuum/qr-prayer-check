@@ -3,9 +3,9 @@
 import { useEffect, useState } from "react";
 import { QRCodeCanvas } from "qrcode.react";
 import { motion, AnimatePresence } from "framer-motion";
-import { ArrowLeft, RefreshCw, Trash2, Lock, Printer, List, Link as LinkIcon, Download, Calendar as CalendarIcon, ChevronLeft, ChevronRight, Settings, MapPin, Power, Database, Trophy, Search, Loader2, BookOpen } from "lucide-react";
+import { ArrowLeft, RefreshCw, Trash2, Lock, Printer, List, Link as LinkIcon, Download, Calendar as CalendarIcon, ChevronLeft, ChevronRight, Settings, MapPin, Power, Database, Trophy, Search, Loader2, BookOpen, Plus, X } from "lucide-react";
 import Link from "next/link";
-import { checkAdminSession, loginAdmin, logoutAdmin, getTodaysLogs, clearHistory, getMonthlyStats, getLogsByDate, getSystemSettings, updateSystemSetting, getAllLogs, getAttendanceRankings, deleteLog, getAttendees, deleteAttendee } from "../actions";
+import { checkAdminSession, loginAdmin, logoutAdmin, getTodaysLogs, clearHistory, getMonthlyStats, getLogsByDate, getSystemSettings, updateSystemSetting, getAllLogs, getAttendanceRankings, deleteLog, getAttendees, deleteAttendee, getSchedules, addSchedule, deleteSchedule } from "../actions";
 import { format, startOfMonth, endOfMonth, startOfWeek, endOfWeek, eachDayOfInterval, isSameMonth, isSameDay, addMonths, subMonths } from "date-fns";
 import clsx from "clsx";
 
@@ -14,6 +14,13 @@ interface ScanRecord {
     name: string;
     phone: string;
     created_at: string;
+}
+
+interface Schedule {
+    id: number;
+    title: string;
+    date: string;
+    type: string;
 }
 
 interface AttendeeRecord {
@@ -36,6 +43,10 @@ export default function AdminPage() {
     const [selectedDate, setSelectedDate] = useState<Date | null>(new Date());
     const [monthlyStats, setMonthlyStats] = useState<{ [key: string]: number }>({});
     const [selectedLogs, setSelectedLogs] = useState<ScanRecord[]>([]);
+
+    // Schedule State
+    const [schedules, setSchedules] = useState<Schedule[]>([]);
+    const [newScheduleTitle, setNewScheduleTitle] = useState("");
 
     // Settings State
     const [settings, setSettings] = useState<any>({});
@@ -72,6 +83,7 @@ export default function AdminPage() {
                 loadMonthlyStats(currentDate);
                 if (selectedDate) loadSelectedDateLogs(selectedDate);
                 loadSettings();
+                loadSchedules(currentDate);
             }
         });
 
@@ -87,7 +99,9 @@ export default function AdminPage() {
             else loadAttendees();
         }
         if (isAdmin && tab === "ranking") loadRankings();
+        if (isAdmin && tab === "calendar") loadSchedules(currentDate);
     }, [isAdmin, tab, dbPage, attendeePage, dbSearch, rankPeriod, rankSort, dbView, dbSortBy, dbSortOrder]);
+
 
     const handleLogin = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -210,6 +224,36 @@ export default function AdminPage() {
         setMonthlyStats(stats);
     }
 
+    const loadSchedules = async (date: Date) => {
+        const data = await getSchedules(date.getFullYear(), date.getMonth() + 1);
+        setSchedules(data);
+    }
+
+    const handleMonthChange = (dir: number) => {
+        const newDate = dir > 0 ? addMonths(currentDate, 1) : subMonths(currentDate, 1);
+        setCurrentDate(newDate);
+        loadMonthlyStats(newDate);
+        loadSchedules(newDate);
+    }
+
+    const handleAddSchedule = async () => {
+        if (!selectedDate || !newScheduleTitle.trim()) return;
+        const dateStr = format(selectedDate, "yyyy-MM-dd");
+        const res = await addSchedule(newScheduleTitle, dateStr, 'primary');
+        if (res.success) {
+            setNewScheduleTitle("");
+            loadSchedules(currentDate);
+        } else {
+            alert(res.error);
+        }
+    }
+
+    const handleDeleteSchedule = async (id: number) => {
+        if (!confirm("일정을 삭제하시겠습니까?")) return;
+        await deleteSchedule(id);
+        loadSchedules(currentDate);
+    }
+
     const loadSelectedDateLogs = async (date: Date) => {
         const dateStr = format(date, "yyyy-MM-dd");
         const data = await getLogsByDate(dateStr);
@@ -227,11 +271,6 @@ export default function AdminPage() {
         setSettings(data);
     }
 
-    const handleMonthChange = (dir: number) => {
-        const newDate = dir > 0 ? addMonths(currentDate, 1) : subMonths(currentDate, 1);
-        setCurrentDate(newDate);
-        loadMonthlyStats(newDate);
-    }
 
     const handleDateClick = (day: Date) => {
         setSelectedDate(day);
@@ -528,27 +567,73 @@ export default function AdminPage() {
 
                     {selectedDate && (
                         <div className="bg-white/5 border border-white/10 rounded-3xl p-6 min-h-[300px]">
-                            <h3 className="text-lg font-bold mb-4 flex items-center gap-2">
-                                <span className="text-primary">{format(selectedDate, "M월 d일")}</span> 출석 명단
-                                <span className="bg-white/10 text-xs px-2 py-1 rounded-full text-slate-400">{selectedLogs.length}명</span>
-                            </h3>
+                            <div className="flex justify-between items-center mb-4">
+                                <h3 className="text-lg font-bold flex items-center gap-2">
+                                    <span className="text-primary">{format(selectedDate, "M월 d일")}</span>
+                                </h3>
+                                <div className="text-slate-400 text-xs text-right">
+                                    출석 {selectedLogs.length}명 · 일정 {schedules.filter(s => s.date.startsWith(format(selectedDate, "yyyy-MM-dd"))).length}개
+                                </div>
+                            </div>
 
-                            <div className="space-y-3 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
+                            {/* Schedule Section */}
+                            <div className="mb-6 border-b border-white/10 pb-4">
+                                <h4 className="text-sm font-bold text-slate-400 mb-2 flex items-center justify-between">
+                                    일정 관리
+                                </h4>
+
+                                <div className="flex gap-2 mb-3">
+                                    <input
+                                        type="text"
+                                        value={newScheduleTitle}
+                                        onChange={(e) => setNewScheduleTitle(e.target.value)}
+                                        placeholder="새 일정 제목..."
+                                        className="flex-1 bg-black/30 border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:border-primary outline-none"
+                                        onKeyDown={(e) => e.key === 'Enter' && handleAddSchedule()}
+                                    />
+                                    <button
+                                        onClick={handleAddSchedule}
+                                        className="bg-primary/20 hover:bg-primary/30 text-primary rounded-lg px-3 py-2 transition-colors"
+                                    >
+                                        <Plus className="w-4 h-4" />
+                                    </button>
+                                </div>
+
+                                <div className="space-y-2">
+                                    {schedules.filter(s => s.date.startsWith(format(selectedDate, "yyyy-MM-dd"))).length === 0 ? (
+                                        <p className="text-xs text-slate-500 py-1">일정이 없습니다.</p>
+                                    ) : (
+                                        schedules
+                                            .filter(s => s.date.startsWith(format(selectedDate, "yyyy-MM-dd")))
+                                            .map((s) => (
+                                                <div key={s.id} className="flex justify-between items-center bg-white/5 rounded-lg p-2 px-3">
+                                                    <span className="text-sm text-white">{s.title}</span>
+                                                    <button onClick={() => handleDeleteSchedule(s.id)} className="text-slate-500 hover:text-red-400">
+                                                        <X className="w-3 h-3" />
+                                                    </button>
+                                                </div>
+                                            ))
+                                    )}
+                                </div>
+                            </div>
+
+                            <h4 className="text-sm font-bold text-slate-400 mb-2">출석 명단</h4>
+                            <div className="space-y-3 max-h-[300px] overflow-y-auto pr-2 custom-scrollbar">
                                 {selectedLogs.length === 0 ? (
-                                    <p className="text-center text-slate-500 py-8">이 날짜의 기록이 없습니다.</p>
+                                    <p className="text-center text-slate-500 py-4 text-xs">기록이 없습니다.</p>
                                 ) : (
                                     selectedLogs.map((log) => (
                                         <motion.div
                                             key={log.id}
                                             initial={{ opacity: 0 }}
                                             animate={{ opacity: 1 }}
-                                            className="bg-white/5 p-4 rounded-xl flex justify-between items-center"
+                                            className="bg-white/5 p-3 rounded-xl flex justify-between items-center"
                                         >
                                             <div>
-                                                <p className="font-bold text-white text-lg">{log.name}</p>
-                                                <p className="text-sm text-slate-400">{log.phone}</p>
+                                                <p className="font-bold text-white text-sm">{log.name}</p>
+                                                <p className="text-xs text-slate-400">{log.phone}</p>
                                             </div>
-                                            <span className="text-sm font-mono text-slate-500">
+                                            <span className="text-xs font-mono text-slate-500">
                                                 {log.created_at}
                                             </span>
                                         </motion.div>

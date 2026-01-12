@@ -4,19 +4,37 @@ import Link from "next/link";
 import { motion } from "framer-motion";
 import { QrCode, ClipboardList, Calendar as CalendarIcon, Users, Quote } from "lucide-react";
 import { useEffect, useState } from "react";
-import { getPublicStats, getDailyVerse } from "./actions";
-import { startOfMonth, endOfMonth, startOfWeek, endOfWeek, eachDayOfInterval, format, isSameMonth, isSameDay } from "date-fns";
+import { startOfMonth, endOfMonth, startOfWeek, endOfWeek, eachDayOfInterval, format, isSameMonth, isSameDay, isAfter, isToday } from "date-fns";
 import clsx from "clsx";
+import { getPublicStats, getDailyVerse, getSchedules } from "./actions";
+
+interface Schedule {
+  id: number;
+  title: string;
+  date: string;
+  type: string;
+}
 
 export default function Home() {
   const [stats, setStats] = useState<{ todayCount: number, monthlyStats: { [key: string]: number } }>({ todayCount: 0, monthlyStats: {} });
   const [verse, setVerse] = useState<{ text: string, addr: string } | null>(null);
   const [currentDate] = useState(new Date());
+  const [schedules, setSchedules] = useState<Schedule[]>([]);
 
   useEffect(() => {
     getPublicStats().then(setStats);
     getDailyVerse().then(setVerse);
+    getSchedules(currentDate.getFullYear(), currentDate.getMonth() + 1).then(setSchedules);
   }, []);
+
+  // Filter for upcoming schedules (today or future)
+  const upcomingSchedules = schedules
+    .filter(s => {
+      const sDate = new Date(s.date);
+      return isToday(sDate) || isAfter(sDate, new Date());
+    })
+    .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+    .slice(0, 3); // Show top 3
 
   const CalendarGrid = () => {
     const monthStart = startOfMonth(currentDate);
@@ -35,7 +53,8 @@ export default function Home() {
           const dateStr = format(day, "yyyy-MM-dd");
           const count = stats.monthlyStats[dateStr] || 0;
           const isCurrentMonth = isSameMonth(day, currentDate);
-          const isToday = isSameDay(day, new Date());
+          const isTodayDate = isSameDay(day, new Date());
+          const hasSchedule = schedules.some(s => s.date === dateStr);
 
           // Heatmap colors
           let bgClass = "bg-white/5";
@@ -51,13 +70,15 @@ export default function Home() {
                 "aspect-square rounded-lg flex flex-col items-center justify-center relative transition-all",
                 !isCurrentMonth && "opacity-20",
                 bgClass,
-                isToday && "ring-2 ring-white"
+                isTodayDate && "ring-2 ring-white",
+                hasSchedule && "border border-primary"
               )}
               title={`${dateStr}: ${count}명`}
             >
               <span className={clsx("text-[10px] font-medium", count > 10 ? "text-white" : "text-slate-400")}>
                 {format(day, "d")}
               </span>
+              {hasSchedule && <div className="absolute top-1 right-1 w-1 h-1 bg-primary rounded-full"></div>}
             </div>
           )
         })}
@@ -137,6 +158,33 @@ export default function Home() {
           </div>
           <CalendarGrid />
         </motion.div>
+
+        {/* Upcoming Schedules */}
+        {upcomingSchedules.length > 0 && (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.35 }}
+            className="space-y-3"
+          >
+            <h3 className="text-sm font-bold text-slate-300 px-2">다가오는 일정</h3>
+            <div className="space-y-2">
+              {upcomingSchedules.map((schedule) => (
+                <div key={schedule.id} className="bg-white/5 border border-white/10 p-4 rounded-xl flex items-center gap-4">
+                  <div className="bg-white/10 p-2 rounded-lg text-center min-w-[50px]">
+                    <span className="block text-xs text-slate-400">{format(new Date(schedule.date), "MMM")}</span>
+                    <span className="block text-lg font-bold text-white">{format(new Date(schedule.date), "d")}</span>
+                  </div>
+                  <div>
+                    <h4 className="text-white font-bold">{schedule.title}</h4>
+                    <p className="text-xs text-slate-500">{format(new Date(schedule.date), "yyyy년 M월 d일 (EEE)", { locale: undefined })}</p>
+                    {/* locale is handled by default or we can import ko if needed, for now standard format */}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </motion.div>
+        )}
 
         {/* Navigation Grid */}
         <motion.div
