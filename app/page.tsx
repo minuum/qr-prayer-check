@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { motion } from "framer-motion";
-import { QrCode, ClipboardList, Calendar as CalendarIcon, Users, Quote } from "lucide-react";
+import { QrCode, ClipboardList, Calendar as CalendarIcon, Users, Quote, Trophy } from "lucide-react";
 import { useEffect, useState } from "react";
 import { startOfMonth, endOfMonth, startOfWeek, endOfWeek, eachDayOfInterval, format, isSameMonth, isSameDay, isAfter, isToday } from "date-fns";
 import clsx from "clsx";
@@ -191,32 +191,51 @@ export default function Home() {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.4 }}
-          className="grid grid-cols-2 gap-4 mt-8 pb-8"
+          className="flex flex-col gap-4 mt-8 pb-8"
         >
-          <Link href="/check-in" className="group relative overflow-hidden bg-gradient-to-br from-primary to-violet-600 rounded-3xl p-1 transition-all hover:scale-[1.02] active:scale-[0.98]">
+          {/* Main Action: Check-in */}
+          <Link href="/check-in" className="group relative overflow-hidden bg-gradient-to-br from-primary to-violet-600 rounded-3xl p-1 transition-all hover:scale-[1.01] active:scale-[0.99] w-full">
             <div className="absolute inset-0 bg-white/20 opacity-0 group-hover:opacity-100 transition-opacity" />
-            <div className="bg-black/20 backdrop-blur-sm rounded-[20px] p-6 h-full flex flex-col items-center justify-center text-center gap-3">
-              <div className="p-3 bg-white/20 rounded-full text-white">
-                <QrCode className="w-6 h-6" />
-              </div>
-              <div>
-                <span className="block text-lg font-bold text-white">출석하기</span>
-                <span className="text-[10px] text-white/60">QR 스캔 / 체크인</span>
+            <div className="bg-black/20 backdrop-blur-sm rounded-[20px] p-6 h-full flex items-center justify-between text-left gap-4">
+              <div className="flex items-center gap-4">
+                <div className="p-4 bg-white/20 rounded-full text-white">
+                  <QrCode className="w-8 h-8" />
+                </div>
+                <div>
+                  <span className="block text-xl font-bold text-white">출석하기</span>
+                  <span className="text-xs text-white/70">QR 스캔 / 체크인</span>
+                </div>
               </div>
             </div>
           </Link>
 
-          <Link href="/admin" className="group relative overflow-hidden bg-white/5 border border-white/10 rounded-3xl transition-all hover:bg-white/10 active:scale-[0.98]">
-            <div className="p-6 h-full flex flex-col items-center justify-center text-center gap-3">
-              <div className="p-3 bg-white/5 rounded-full text-slate-400 group-hover:text-white transition-colors">
-                <Users className="w-6 h-6" />
+          <div className="grid grid-cols-2 gap-4">
+            <Link href="/growth" className="group relative overflow-hidden bg-white/5 border border-white/10 rounded-3xl transition-all hover:bg-white/10 active:scale-[0.98]">
+              <div className="absolute inset-0 bg-teal-500/5 opacity-0 group-hover:opacity-100 transition-opacity" />
+              <div className="p-6 h-full flex flex-col items-center justify-center text-center gap-3">
+                <div className="p-3 bg-teal-500/20 rounded-full text-teal-400 group-hover:text-white transition-colors">
+                  <Trophy className="w-6 h-6" />
+                </div>
+                <div>
+                  <span className="block text-lg font-bold text-slate-300 group-hover:text-white transition-colors">성장</span>
+                  <span className="text-[10px] text-slate-500">비전 대시보드</span>
+                </div>
               </div>
-              <div>
-                <span className="block text-lg font-bold text-slate-300 group-hover:text-white transition-colors">관리자</span>
-                <span className="text-[10px] text-slate-500">현황판 확인</span>
+            </Link>
+
+            <Link href="/admin" className="group relative overflow-hidden bg-white/5 border border-white/10 rounded-3xl transition-all hover:bg-white/10 active:scale-[0.98]">
+              <div className="absolute inset-0 bg-white/5 opacity-0 group-hover:opacity-100 transition-opacity" />
+              <div className="p-6 h-full flex flex-col items-center justify-center text-center gap-3">
+                <div className="p-3 bg-white/5 rounded-full text-slate-400 group-hover:text-white transition-colors">
+                  <Users className="w-6 h-6" />
+                </div>
+                <div>
+                  <span className="block text-lg font-bold text-slate-300 group-hover:text-white transition-colors">관리자</span>
+                  <span className="text-[10px] text-slate-500">현황판 확인</span>
+                </div>
               </div>
-            </div>
-          </Link>
+            </Link>
+          </div>
         </motion.div>
       </div>
       <footer className="mt-12 text-center text-[10px] text-slate-600 pb-4">
