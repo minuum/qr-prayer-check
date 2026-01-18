@@ -142,14 +142,26 @@ export default function GrowthDashboard() {
                         <ArrowLeft className="w-5 h-5" />
                     </Link>
                     <div>
-                        <h1 className="text-2xl font-black text-white">성장 대시보드</h1>
-                        <p className="text-xs text-slate-400">2026 청년대학부 비전</p>
+                        <h1 className="text-2xl font-black text-white">
+                            {isLoggedIn ? `${loadedUser?.name}님의 성장기록` : "성장 대시보드"}
+                        </h1>
+                        <p className="text-xs text-slate-400">
+                            {isLoggedIn ? "2026 청년대학부 비전" : "2026 청년대학부 비전"}
+                        </p>
                     </div>
                 </div>
+                {isLoggedIn && (
+                    <button
+                        onClick={handleLogout}
+                        className="p-2 bg-white/5 rounded-xl text-slate-400 hover:text-red-400 hover:bg-white/10 border border-white/10 transition-colors"
+                    >
+                        <RefreshCcw className="w-5 h-5" />
+                    </button>
+                )}
             </div>
 
-            {/* Login / User Info Section */}
-            {!isLoggedIn ? (
+            {/* Login Section (Only if not logged in) */}
+            {!isLoggedIn && (
                 <div className="bg-white/5 border border-white/10 p-5 rounded-2xl mb-8">
                     <h3 className="text-sm font-bold text-white mb-3 flex items-center gap-2">
                         <LogIn className="w-4 h-4 text-primary" /> 내 점수 불러오기
@@ -174,56 +186,50 @@ export default function GrowthDashboard() {
                         </button>
                     </div>
                 </div>
-            ) : (
-                <div className="bg-gradient-to-r from-primary/20 to-blue-600/20 border border-primary/30 p-5 rounded-2xl mb-8 flex justify-between items-center">
-                    <div>
-                        <p className="text-xs text-primary font-bold mb-1">Welcome</p>
-                        <h3 className="text-lg font-bold text-white">{loadedUser?.name}님의 기록</h3>
-                        <p className="text-[10px] text-slate-400">{loadedUser?.quarter} 기준</p>
-                    </div>
-                    <button onClick={handleLogout} className="p-2 bg-white/5 rounded-lg text-slate-400 hover:text-white hover:bg-white/10">
-                        <RefreshCcw className="w-4 h-4" />
-                    </button>
-                </div>
             )}
 
-            {/* Intro Card */}
-            <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="bg-gradient-to-br from-teal-900/50 to-emerald-900/20 border border-teal-500/30 p-6 rounded-3xl mb-8 relative overflow-hidden"
-            >
-                <div className="absolute top-0 right-0 p-4 opacity-10">
-                    <Trophy className="w-32 h-32 text-teal-400" />
-                </div>
-                <h2 className="text-xl font-bold text-white mb-2">영적으로 더 깊이, 2026</h2>
-                <p className="text-sm text-teal-100/80 mb-4 leading-relaxed max-w-[80%]">
-                    예배, 말씀, 기도의 균형 잡힌 성장을 통해<br />
-                    주님과 더 가까워지는 한 해가 되길 소망합니다.
-                </p>
-                <div className="flex gap-2">
-                    <span className="text-[10px] font-bold bg-teal-500/20 text-teal-300 px-3 py-1 rounded-full border border-teal-500/30">
-                        #예배자
-                    </span>
-                    <span className="text-[10px] font-bold bg-blue-500/20 text-blue-300 px-3 py-1 rounded-full border border-blue-500/30">
-                        #말씀통독
-                    </span>
-                    <span className="text-[10px] font-bold bg-purple-500/20 text-purple-300 px-3 py-1 rounded-full border border-purple-500/30">
-                        #기도생활
-                    </span>
-                </div>
-            </motion.div>
+            {/* Intro Card - Only show if NO user is logged in (to reduce clutter) or change message */}
+            {!isLoggedIn && (
+                <motion.div
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="bg-gradient-to-br from-teal-900/50 to-emerald-900/20 border border-teal-500/30 p-6 rounded-3xl mb-8 relative overflow-hidden"
+                >
+                    <div className="absolute top-0 right-0 p-4 opacity-10">
+                        <Trophy className="w-32 h-32 text-teal-400" />
+                    </div>
+                    <h2 className="text-xl font-bold text-white mb-2">영적으로 더 깊이, 2026</h2>
+                    <p className="text-sm text-teal-100/80 mb-4 leading-relaxed max-w-[80%]">
+                        예배, 말씀, 기도의 균형 잡힌 성장을 통해<br />
+                        주님과 더 가까워지는 한 해가 되길 소망합니다.
+                    </p>
+                    <div className="flex gap-2">
+                        <span className="text-[10px] font-bold bg-teal-500/20 text-teal-300 px-3 py-1 rounded-full border border-teal-500/30">
+                            #예배자
+                        </span>
+                        <span className="text-[10px] font-bold bg-blue-500/20 text-blue-300 px-3 py-1 rounded-full border border-blue-500/30">
+                            #말씀통독
+                        </span>
+                        <span className="text-[10px] font-bold bg-purple-500/20 text-purple-300 px-3 py-1 rounded-full border border-purple-500/30">
+                            #기도생활
+                        </span>
+                    </div>
+                </motion.div>
+            )}
 
             {/* Simulator Section */}
             <h2 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
-                <Calculator className="w-5 h-5 text-yellow-400" /> 점수 시뮬레이터
+                <Calculator className="w-5 h-5 text-yellow-400" />
+                {isLoggedIn ? "나의 2026-1Q 성적표" : "점수 시뮬레이터"}
             </h2>
 
             <div className="bg-white/5 border border-white/10 rounded-3xl p-6 mb-8 backdrop-blur-sm">
                 <div className="flex flex-col md:flex-row items-center gap-8 mb-8">
                     <GaugeChart value={score} />
                     <div className="text-center md:text-left flex-1 space-y-2 p-4 bg-white/5 rounded-2xl border border-white/5 w-full">
-                        <p className="text-sm text-slate-400">예상 결과</p>
+                        <p className="text-sm text-slate-400">
+                            {isLoggedIn ? "현재 점수" : "예상 결과"}
+                        </p>
                         <h3 className={clsx("text-xl font-bold", tier.color)}>{tier.name}</h3>
                         <p className="text-xs text-slate-300">{tier.desc}</p>
                     </div>
