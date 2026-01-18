@@ -585,3 +585,102 @@ export async function deleteSchedule(id: number) {
     revalidatePath("/");
     return { success: true };
 }
+
+// --- Growth Dashboard Actions ---
+
+export async function getGrowthStatsByName(name: string, phone: string, quarter: string) {
+    if (!checkConfig() || !supabase) return { success: false, error: "DB Error" };
+
+    // 1. Find Attendee
+    const { data: attendee } = await supabase
+        .from("attendees")
+        .select("id")
+        .eq("name", name)
+        .or(`phone.eq.${phone},phone.like.%${phone}`) // Support full or last 4 digits if simple
+        .single();
+
+    if (!attendee) {
+        return { success: false, error: "사용자를 찾을 수 없습니다. (이름과 전화번호를 확인해주세요)" };
+    }
+
+    // 2. Fetch Stats
+    const { data: stats } = await supabase
+        .from("growth_stats")
+        .select("*")
+        .eq("attendee_id", attendee.id)
+        .eq("quarter", quarter)
+        .single();
+
+    if (!stats) {
+        return { success: true, notFound: true, attendeeId: attendee.id }; // User exists, but no recorded stats yet
+    }
+
+    return { success: true, data: stats };
+}
+
+export async function getAllGrowthStats(quarter: string) {
+    const isAdmin = await checkAdminSession();
+    if (!isAdmin) return [];
+    if (!checkConfig() || !supabase) return [];
+
+    // Join with attendees to show names
+    const { data } = await supabase
+        .from("growth_stats")
+        .select(`
+            *,
+            attendees (name, phone)
+        `)
+        .eq("quarter", quarter);
+
+    // Also need list of ALL attendees to show who has NO stats yet?
+    // Maybe better: Fetch all attendees and LEFT JOIN stats.
+
+    const { data: allAttendees } = await supabase
+        .from("attendees")
+        .select(`
+            id, name, phone,
+            growth_stats(*)
+        `)
+        .eq('growth_stats.quarter', quarter); // This filter on inner join might be tricky in simple Supabase select if we want LEFT JOIN behavior with filter.
+
+    // Simplest: Fetch all attendees, fetch all stats for quarter, merge in JS.
+    const { data: attendees } = await supabase.from("attendees").select("id, name, phone").order("name");
+    const { data: stats } = await supabase.from("growth_stats").select("*").eq("quarter", quarter);
+
+    if (!attendees) return [];
+
+    const statsMap = new Map();
+    stats?.forEach(s => statsMap.set(s.attendee_id, s));
+
+    return attendees.map(a => ({
+        ...a,
+        stats: statsMap.get(a.id) || {
+            absent_count: 0,
+            bible_score: 20,
+            prayer_score: 0,
+            evangelism_count: 0,
+            service_score: 7,
+            special_score: 7
+        }
+    }));
+}
+
+export async function upsertGrowthStats(attendeeId: string, quarter: string, stats: any) {
+    const isAdmin = await checkAdminSession();
+    if (!isAdmin) return { success: false, error: "Unauthorized" };
+    if (!checkConfig() || !supabase) return { success: false };
+
+    const { error } = await supabase
+        .from("growth_stats")
+        .upsert({
+            attendee_id: attendeeId,
+            quarter,
+            ...stats,
+            updated_at: new Date().toISOString()
+        }, { onConflict: 'attendee_id, quarter' });
+
+    if (error) return { success: false, error: error.message };
+
+    revalidatePath("/admin");
+    return { success: true };
+}

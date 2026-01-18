@@ -5,7 +5,7 @@ import { QRCodeCanvas } from "qrcode.react";
 import { motion, AnimatePresence } from "framer-motion";
 import { ArrowLeft, RefreshCw, Trash2, Lock, Printer, List, Link as LinkIcon, Download, Calendar as CalendarIcon, ChevronLeft, ChevronRight, Settings, MapPin, Power, Database, Trophy, Search, Loader2, BookOpen, Plus, X } from "lucide-react";
 import Link from "next/link";
-import { checkAdminSession, loginAdmin, logoutAdmin, getTodaysLogs, clearHistory, getMonthlyStats, getLogsByDate, getSystemSettings, updateSystemSetting, getAllLogs, getAttendanceRankings, deleteLog, getAttendees, deleteAttendee, getSchedules, addSchedule, deleteSchedule } from "../actions";
+import { checkAdminSession, loginAdmin, logoutAdmin, getTodaysLogs, clearHistory, getMonthlyStats, getLogsByDate, getSystemSettings, updateSystemSetting, getAllLogs, getAttendanceRankings, deleteLog, getAttendees, deleteAttendee, getSchedules, addSchedule, deleteSchedule, getAllGrowthStats, upsertGrowthStats } from "../actions";
 import { format, startOfMonth, endOfMonth, startOfWeek, endOfWeek, eachDayOfInterval, isSameMonth, isSameDay, addMonths, subMonths } from "date-fns";
 import clsx from "clsx";
 
@@ -29,13 +29,26 @@ interface AttendeeRecord {
     phone: string;
     created_at: string;
     checkInCount: number;
+    stats?: GrowthStats;
+}
+
+interface GrowthStats {
+    id?: number;
+    attendee_id: string;
+    quarter: string;
+    absent_count: number;
+    bible_score: number;
+    prayer_score: number;
+    evangelism_count: number;
+    service_score: number;
+    special_score: number;
 }
 
 export default function AdminPage() {
     const [isAdmin, setIsAdmin] = useState(false);
     const [password, setPassword] = useState("");
     const [logs, setLogs] = useState<ScanRecord[]>([]);
-    const [tab, setTab] = useState<"dashboard" | "calendar" | "db" | "ranking" | "qr" | "settings" | "guide">("dashboard");
+    const [tab, setTab] = useState<"dashboard" | "calendar" | "db" | "growth" | "ranking" | "qr" | "settings" | "guide">("dashboard");
     const [hostUrl, setHostUrl] = useState("");
 
     // Calendar State
@@ -47,6 +60,10 @@ export default function AdminPage() {
     // Schedule State
     const [schedules, setSchedules] = useState<Schedule[]>([]);
     const [newScheduleTitle, setNewScheduleTitle] = useState("");
+
+    // Growth State
+    const [growthQuarter, setGrowthQuarter] = useState("2026-1Q");
+    const [growthStats, setGrowthStats] = useState<AttendeeRecord[]>([]);
 
     // Settings State
     const [settings, setSettings] = useState<any>({});
@@ -100,6 +117,7 @@ export default function AdminPage() {
         }
         if (isAdmin && tab === "ranking") loadRankings();
         if (isAdmin && tab === "calendar") loadSchedules(currentDate);
+        if (isAdmin && tab === "growth") loadGrowthStats();
     }, [isAdmin, tab, dbPage, attendeePage, dbSearch, rankPeriod, rankSort, dbView, dbSortBy, dbSortOrder]);
 
 
@@ -155,6 +173,35 @@ export default function AdminPage() {
         setAttendees(mapped);
         setAttendeeCount(res.count);
         setDbLoading(false);
+    }
+
+    const loadGrowthStats = async () => {
+        // Fetch all attendees with their stats for the quarter
+        const data = await getAllGrowthStats(growthQuarter);
+        setGrowthStats(data as any);
+    }
+
+    const handleUpdateGrowthStat = async (attendeeId: string, field: string, value: any) => {
+        // Optimistic update
+        const updated = growthStats.map(user => {
+            if (user.id === attendeeId) {
+                return {
+                    ...user,
+                    stats: {
+                        ...user.stats!,
+                        [field]: value
+                    }
+                }
+            }
+            return user;
+        });
+        setGrowthStats(updated);
+
+        // Find the full updated stat object
+        const user = updated.find(u => u.id === attendeeId);
+        if (user && user.stats) {
+            await upsertGrowthStats(attendeeId, growthQuarter, user.stats);
+        }
     }
 
     const handleDeleteLog = async (id: number) => {
@@ -430,6 +477,12 @@ export default function AdminPage() {
                     className={`flex-1 py-2 px-3 text-sm font-bold rounded-lg transition-all whitespace-nowrap ${tab === 'db' ? 'bg-primary text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}
                 >
                     <Database className="w-4 h-4 inline mr-2" /> DB
+                </button>
+                <button
+                    onClick={() => setTab("growth")}
+                    className={`flex-1 py-2 px-3 text-sm font-bold rounded-lg transition-all whitespace-nowrap ${tab === 'growth' ? 'bg-primary text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}
+                >
+                    <Trophy className="w-4 h-4 inline mr-2" /> 평가
                 </button>
                 <button
                     onClick={() => setTab("ranking")}

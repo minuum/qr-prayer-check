@@ -3,8 +3,9 @@
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import Link from "next/link";
-import { ArrowLeft, Calculator, Trophy, BookOpen, UserPlus, Heart, HandHeart, Sparkles, CheckCircle2, AlertCircle, Gift, ArrowRight } from "lucide-react";
+import { ArrowLeft, Calculator, Trophy, BookOpen, UserPlus, Heart, HandHeart, Sparkles, CheckCircle2, AlertCircle, Gift, LogIn, RefreshCcw } from "lucide-react";
 import clsx from "clsx";
+import { getGrowthStatsByName } from "../actions";
 
 export default function GrowthDashboard() {
     // Simulator State
@@ -14,6 +15,13 @@ export default function GrowthDashboard() {
     const [evangelism, setEvangelism] = useState(0);
     const [service, setService] = useState(7);
     const [special, setSpecial] = useState(7);
+
+    // User State
+    const [loginName, setLoginName] = useState("");
+    const [loginPhone, setLoginPhone] = useState("");
+    const [isLoggedIn, setIsLoggedIn] = useState(false);
+    const [loading, setLoading] = useState(false);
+    const [loadedUser, setLoadedUser] = useState<{ name: string, quarter: string } | null>(null);
 
     // Derived State
     const [score, setScore] = useState(0);
@@ -46,6 +54,54 @@ export default function GrowthDashboard() {
             setTier({ name: "격려 대상 (Fail)", desc: "조금만 더 힘내세요! (70점 커트라인)", color: "text-red-400" });
         }
     }, [absent, bible, prayer, evangelism, service, special]);
+
+    const handleLogin = async () => {
+        if (!loginName || !loginPhone) {
+            alert("이름과 전화번호를 입력해주세요.");
+            return;
+        }
+        setLoading(true);
+        // Default to current quarter (e.g., '2026-1Q') - In production, calculate dynamically
+        const currentQuarter = "2026-1Q";
+
+        const res = await getGrowthStatsByName(loginName, loginPhone, currentQuarter);
+
+        if (res.success) {
+            setIsLoggedIn(true);
+            setLoadedUser({ name: loginName, quarter: currentQuarter });
+
+            if (res.data) {
+                // Update simulator with real data
+                setAbsent(res.data.absent_count ?? 0);
+                setBible(res.data.bible_score ?? 20);
+                setPrayer(res.data.prayer_score ?? 0);
+                setEvangelism(res.data.evangelism_count ?? 0);
+                setService(res.data.service_score ?? 7);
+                setSpecial(res.data.special_score ?? 7);
+            } else if (res.notFound) {
+                // User exists but no stats record created yet.
+                // Keep default simulator values but show logged in state.
+                alert(`반갑습니다 ${loginName}님! 아직 평가 데이터가 입력되지 않아 기본값으로 표시됩니다.`);
+            }
+        } else {
+            alert(res.error);
+        }
+        setLoading(false);
+    }
+
+    const handleLogout = () => {
+        setIsLoggedIn(false);
+        setLoadedUser(null);
+        setLoginName("");
+        setLoginPhone("");
+        // Reset defaults
+        setAbsent(0);
+        setBible(20);
+        setPrayer(15);
+        setEvangelism(0);
+        setService(7);
+        setSpecial(7);
+    }
 
     // Custom Gauge Chart using SVG
     const GaugeChart = ({ value }: { value: number }) => {
@@ -80,15 +136,56 @@ export default function GrowthDashboard() {
         <div className="min-h-screen p-4 pb-20 max-w-2xl mx-auto font-[family-name:var(--font-geist-sans)]">
 
             {/* Header */}
-            <div className="flex items-center gap-4 mb-8 pt-4">
-                <Link href="/" className="p-2 bg-white/5 rounded-xl text-slate-400 hover:text-white transition-colors border border-white/10">
-                    <ArrowLeft className="w-5 h-5" />
-                </Link>
-                <div>
-                    <h1 className="text-2xl font-black text-white">성장 대시보드</h1>
-                    <p className="text-xs text-slate-400">2026 청년대학부 비전</p>
+            <div className="flex items-center justify-between mb-8 pt-4">
+                <div className="flex items-center gap-4">
+                    <Link href="/" className="p-2 bg-white/5 rounded-xl text-slate-400 hover:text-white transition-colors border border-white/10">
+                        <ArrowLeft className="w-5 h-5" />
+                    </Link>
+                    <div>
+                        <h1 className="text-2xl font-black text-white">성장 대시보드</h1>
+                        <p className="text-xs text-slate-400">2026 청년대학부 비전</p>
+                    </div>
                 </div>
             </div>
+
+            {/* Login / User Info Section */}
+            {!isLoggedIn ? (
+                <div className="bg-white/5 border border-white/10 p-5 rounded-2xl mb-8">
+                    <h3 className="text-sm font-bold text-white mb-3 flex items-center gap-2">
+                        <LogIn className="w-4 h-4 text-primary" /> 내 점수 불러오기
+                    </h3>
+                    <div className="flex gap-2">
+                        <input
+                            type="text" placeholder="이름"
+                            value={loginName} onChange={(e) => setLoginName(e.target.value)}
+                            className="w-1/3 bg-black/30 border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:border-primary outline-none"
+                        />
+                        <input
+                            type="text" placeholder="휴대폰 번호 (뒷 4자리 또는 전체)"
+                            value={loginPhone} onChange={(e) => setLoginPhone(e.target.value)}
+                            className="flex-1 bg-black/30 border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:border-primary outline-none"
+                            onKeyDown={(e) => e.key === 'Enter' && handleLogin()}
+                        />
+                        <button
+                            onClick={handleLogin} disabled={loading}
+                            className="bg-primary text-white font-bold px-4 rounded-lg text-sm hover:bg-primary/90 disabled:opacity-50"
+                        >
+                            {loading ? "..." : "확인"}
+                        </button>
+                    </div>
+                </div>
+            ) : (
+                <div className="bg-gradient-to-r from-primary/20 to-blue-600/20 border border-primary/30 p-5 rounded-2xl mb-8 flex justify-between items-center">
+                    <div>
+                        <p className="text-xs text-primary font-bold mb-1">Welcome</p>
+                        <h3 className="text-lg font-bold text-white">{loadedUser?.name}님의 기록</h3>
+                        <p className="text-[10px] text-slate-400">{loadedUser?.quarter} 기준</p>
+                    </div>
+                    <button onClick={handleLogout} className="p-2 bg-white/5 rounded-lg text-slate-400 hover:text-white hover:bg-white/10">
+                        <RefreshCcw className="w-4 h-4" />
+                    </button>
+                </div>
+            )}
 
             {/* Intro Card */}
             <motion.div
