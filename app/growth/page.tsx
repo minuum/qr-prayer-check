@@ -280,9 +280,9 @@ export default function GrowthDashboard() {
                             <span className="text-purple-400 font-bold">{prayer}점</span>
                         </div>
                         <div className="grid grid-cols-3 gap-1">
-                            <button onClick={() => setPrayer(15)} className={clsx("p-2 rounded-lg text-xs font-bold border", prayer === 15 ? "bg-purple-500/20 border-purple-500 text-white" : "bg-white/5 border-transparent text-slate-500")}>완주 (15)</button>
-                            <button onClick={() => setPrayer(8)} className={clsx("p-2 rounded-lg text-xs font-bold border", prayer === 8 ? "bg-purple-500/20 border-purple-500 text-white" : "bg-white/5 border-transparent text-slate-500")}>부분 (8)</button>
-                            <button onClick={() => setPrayer(0)} className={clsx("p-2 rounded-lg text-xs font-bold border", prayer === 0 ? "bg-purple-500/20 border-purple-500 text-white" : "bg-white/5 border-transparent text-slate-500")}>미참여 (0)</button>
+                            <button onClick={() => setPrayer(15)} className={clsx("p-2 rounded-lg text-xs font-bold border", prayer === 15 ? "bg-purple-500/20 border-purple-500 text-white" : "bg-white/5 border-transparent text-slate-500")}>주 2회↑ (15)</button>
+                            <button onClick={() => setPrayer(13)} className={clsx("p-2 rounded-lg text-xs font-bold border", prayer === 13 ? "bg-purple-500/20 border-purple-500 text-white" : "bg-white/5 border-transparent text-slate-500")}>주 1회 (13)</button>
+                            <button onClick={() => setPrayer(7)} className={clsx("p-2 rounded-lg text-xs font-bold border", prayer === 7 ? "bg-purple-500/20 border-purple-500 text-white" : "bg-white/5 border-transparent text-slate-500")}>없음 (7)</button>
                         </div>
                     </div>
 

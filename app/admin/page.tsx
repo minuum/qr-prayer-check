@@ -832,6 +832,109 @@ export default function AdminPage() {
                 </div>
             )}
 
+            {tab === "growth" && (
+                <div className="w-full space-y-4 animate-in fade-in duration-300">
+                    <div className="flex justify-between items-center mb-4">
+                        <select
+                            value={growthQuarter}
+                            onChange={(e) => { setGrowthQuarter(e.target.value); loadGrowthStats(); }}
+                            className="bg-black/30 text-white border border-white/10 rounded-lg p-2 text-sm"
+                        >
+                            <option value="2026-1Q">2026-1Q (1~3월)</option>
+                            <option value="2026-2Q">2026-2Q (4~6월)</option>
+                            <option value="2026-3Q">2026-3Q (7~9월)</option>
+                            <option value="2026-4Q">2026-4Q (10~12월)</option>
+                        </select>
+                        <button onClick={loadGrowthStats} className="p-2 bg-white/10 rounded-lg hover:bg-white/20">
+                            <RefreshCw className="w-4 h-4 text-white" />
+                        </button>
+                    </div>
+
+                    <div className="bg-white/5 border border-white/10 rounded-2xl overflow-hidden">
+                        <div className="overflow-x-auto">
+                            <table className="w-full text-left text-sm whitespace-nowrap">
+                                <thead className="bg-white/5 text-slate-400 font-medium">
+                                    <tr>
+                                        <th className="p-4 sticky left-0 bg-[#161a25] z-10 w-24">이름</th>
+                                        <th className="p-4 w-20 text-center">결석 (0~10)</th>
+                                        <th className="p-4 w-20 text-center">성경 (0/5/10/15/20)</th>
+                                        <th className="p-4 w-20 text-center">기도 (0/7/13/15)</th>
+                                        <th className="p-4 w-20 text-center">전도 (0~)</th>
+                                        <th className="p-4 w-20 text-center">봉사 (3/7/10)</th>
+                                        <th className="p-4 w-20 text-center">사역자 (3/7/10)</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-white/5">
+                                    {growthStats.length === 0 ? (
+                                        <tr><td colSpan={7} className="p-8 text-center text-slate-500">데이터가 없습니다. DB 탭에서 교인을 확인하세요.</td></tr>
+                                    ) : (
+                                        growthStats.map(user => {
+                                            const s = user.stats || { absent_count: 0, bible_score: 20, prayer_score: 0, evangelism_count: 0, service_score: 7, special_score: 7 };
+                                            return (
+                                                <tr key={user.id} className="hover:bg-white/5 transition-colors">
+                                                    <td className="p-4 font-bold text-white sticky left-0 bg-[#161a25] border-r border-white/5">
+                                                        {user.name} <span className="text-[10px] text-slate-500 font-normal block">{user.phone}</span>
+                                                    </td>
+                                                    <td className="p-2">
+                                                        <input type="number" min="0" max="20" className="w-full bg-black/20 border border-white/10 rounded p-1 text-center text-white"
+                                                            value={s.absent_count}
+                                                            onChange={(e) => handleUpdateGrowthStat(user.id, 'absent_count', parseInt(e.target.value) || 0)} />
+                                                    </td>
+                                                    <td className="p-2">
+                                                        <select className="w-full bg-black/20 border border-white/10 rounded p-1 text-center text-white"
+                                                            value={s.bible_score}
+                                                            onChange={(e) => handleUpdateGrowthStat(user.id, 'bible_score', parseInt(e.target.value))}>
+                                                            <option value="20">20</option>
+                                                            <option value="15">15</option>
+                                                            <option value="10">10</option>
+                                                            <option value="5">5</option>
+                                                            <option value="0">0</option>
+                                                        </select>
+                                                    </td>
+                                                    <td className="p-2">
+                                                        <select className="w-full bg-black/20 border border-white/10 rounded p-1 text-center text-white"
+                                                            value={s.prayer_score}
+                                                            onChange={(e) => handleUpdateGrowthStat(user.id, 'prayer_score', parseInt(e.target.value))}>
+                                                            <option value="15">15 (주2회↑)</option>
+                                                            <option value="13">13 (주1회)</option>
+                                                            <option value="7">7 (없음)</option>
+                                                            <option value="0">0</option>
+                                                        </select>
+                                                    </td>
+                                                    <td className="p-2">
+                                                        <input type="number" min="0" max="20" className="w-full bg-black/20 border border-white/10 rounded p-1 text-center text-white"
+                                                            value={s.evangelism_count}
+                                                            onChange={(e) => handleUpdateGrowthStat(user.id, 'evangelism_count', parseInt(e.target.value) || 0)} />
+                                                    </td>
+                                                    <td className="p-2">
+                                                        <select className="w-full bg-black/20 border border-white/10 rounded p-1 text-center text-white"
+                                                            value={s.service_score}
+                                                            onChange={(e) => handleUpdateGrowthStat(user.id, 'service_score', parseInt(e.target.value))}>
+                                                            <option value="10">10</option>
+                                                            <option value="7">7</option>
+                                                            <option value="3">3</option>
+                                                        </select>
+                                                    </td>
+                                                    <td className="p-2">
+                                                        <select className="w-full bg-black/20 border border-white/10 rounded p-1 text-center text-white"
+                                                            value={s.special_score}
+                                                            onChange={(e) => handleUpdateGrowthStat(user.id, 'special_score', parseInt(e.target.value))}>
+                                                            <option value="10">10</option>
+                                                            <option value="7">7</option>
+                                                            <option value="3">3</option>
+                                                        </select>
+                                                    </td>
+                                                </tr>
+                                            )
+                                        })
+                                    )}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             {tab === "ranking" && (
                 <div className="w-full space-y-6 animate-in fade-in duration-300">
                     <div className="bg-gradient-to-br from-yellow-500/20 to-amber-700/10 border border-yellow-500/20 p-6 rounded-3xl flex items-center gap-4 shadow-lg shadow-yellow-900/10">
