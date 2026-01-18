@@ -13,8 +13,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "2026 주중기도회 출석체크",
-  description: "QR코드로 간편하게 출석을 체크하세요.",
+  title: "2026 청년대학부 비전",
+  description: "함께 기도의 자리를 지켜주세요.",
 };
 
 export default function RootLayout({
