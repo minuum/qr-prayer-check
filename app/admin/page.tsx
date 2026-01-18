@@ -121,9 +121,11 @@ export default function AdminPage() {
     }, [isAdmin, tab, dbPage, attendeePage, dbSearch, rankPeriod, rankSort, dbView, dbSortBy, dbSortOrder]);
 
 
+    const [adminId, setAdminId] = useState("");
+
     const handleLogin = async (e: React.FormEvent) => {
         e.preventDefault();
-        const res = await loginAdmin(password);
+        const res = await loginAdmin(adminId, password);
         if (res.success) {
             setIsAdmin(true);
             loadLogs();
@@ -134,6 +136,7 @@ export default function AdminPage() {
             alert(res.error);
         }
     }
+
 
     const loadLogs = async () => {
         const data = await getTodaysLogs();
@@ -427,20 +430,32 @@ export default function AdminPage() {
                     <div className="text-center">
                         <Lock className="w-12 h-12 text-primary mx-auto mb-4" />
                         <h1 className="text-2xl font-bold text-white">관리자 로그인</h1>
-                        <p className="text-slate-400 text-sm">비밀번호를 입력하세요</p>
+                        <p className="text-slate-400 text-sm">관리자 계정으로 로그인하세요</p>
                     </div>
                     <form onSubmit={handleLogin} className="space-y-4">
-                        <input
-                            type="password"
-                            value={password}
-                            onChange={e => setPassword(e.target.value)}
-                            className="w-full bg-black/50 border border-white/10 rounded-xl p-3 text-white focus:border-primary outline-none"
-                            placeholder="Password"
-                        />
-                        <button className="w-full bg-primary text-white font-bold py-3 rounded-xl">
+                        <div className="space-y-2">
+                            <input
+                                type="text"
+                                value={adminId}
+                                onChange={e => setAdminId(e.target.value)}
+                                className="w-full bg-black/50 border border-white/10 rounded-xl p-3 text-white focus:border-primary outline-none"
+                                placeholder="아이디 (admin)"
+                            />
+                            <input
+                                type="password"
+                                value={password}
+                                onChange={e => setPassword(e.target.value)}
+                                className="w-full bg-black/50 border border-white/10 rounded-xl p-3 text-white focus:border-primary outline-none"
+                                placeholder="비밀번호"
+                            />
+                        </div>
+                        <button className="w-full bg-primary text-white font-bold py-3 rounded-xl hover:bg-primary/90 transition-colors">
                             로그인
                         </button>
                     </form>
+                    <div className="text-center">
+                        <Link href="/" className="text-sm text-slate-500 hover:text-white">← 메인으로 돌아가기</Link>
+                    </div>
                 </motion.div>
             </div>
         )

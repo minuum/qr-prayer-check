@@ -5,9 +5,11 @@ import { motion } from "framer-motion";
 import Link from "next/link";
 import { ArrowLeft, Calculator, Trophy, BookOpen, UserPlus, Heart, HandHeart, Sparkles, CheckCircle2, AlertCircle, Gift, LogIn, RefreshCcw } from "lucide-react";
 import clsx from "clsx";
-import { getGrowthStatsByName } from "../actions";
+import { useRouter } from "next/navigation";
+import { getGrowthStatsByName, loginAdmin } from "../actions";
 
 export default function GrowthDashboard() {
+    const router = useRouter();
     // Simulator State
     const [absent, setAbsent] = useState(0);
     const [bible, setBible] = useState(20);
@@ -17,8 +19,12 @@ export default function GrowthDashboard() {
     const [special, setSpecial] = useState(7);
 
     // User State
+    const [loginTab, setLoginTab] = useState<"user" | "admin">("user");
     const [loginName, setLoginName] = useState("");
     const [loginPhone, setLoginPhone] = useState("");
+    const [adminId, setAdminId] = useState("");
+    const [adminPw, setAdminPw] = useState("");
+
     const [isLoggedIn, setIsLoggedIn] = useState(false);
     const [loading, setLoading] = useState(false);
     const [loadedUser, setLoadedUser] = useState<{ name: string, quarter: string } | null>(null);
@@ -27,33 +33,7 @@ export default function GrowthDashboard() {
     const [score, setScore] = useState(0);
     const [tier, setTier] = useState({ name: "-", desc: "점수를 입력하세요", color: "text-slate-400" });
 
-    useEffect(() => {
-        // Calculation Logic
-        // 1. Attendance (30pts): 1 absence allows full points.
-        // Formula: Max 30. From 2nd absence, pro-rated over 13 weeks.
-        let attScore = 0;
-        if (absent <= 1) {
-            attScore = 30;
-        } else {
-            attScore = Math.max(0, 30 * (13 - absent) / 12); // (13 - absent) / (13 - 1)
-        }
-
-        // 2. Evangelism (15pts cap): 5pts per person
-        const evanScore = Math.min(15, evangelism * 5);
-
-        // Total
-        const total = Math.round(attScore + bible + prayer + evanScore + service + special);
-        setScore(total);
-
-        // Tier Logic
-        if (total >= 90) {
-            setTier({ name: "분기 1위 유력 (S등급)", desc: "25,000원 상당 혜택 대상자!", color: "text-yellow-400" });
-        } else if (total >= 70) {
-            setTier({ name: "기본 선물 확정 (Pass)", desc: "5,000원 상당 선물 획득!", color: "text-teal-400" });
-        } else {
-            setTier({ name: "격려 대상 (Fail)", desc: "조금만 더 힘내세요! (70점 커트라인)", color: "text-red-400" });
-        }
-    }, [absent, bible, prayer, evangelism, service, special]);
+    // ... useEffect ...
 
     const handleLogin = async () => {
         if (!loginName || !loginPhone) {
@@ -87,6 +67,99 @@ export default function GrowthDashboard() {
             alert(res.error);
         }
         setLoading(false);
+    }
+
+    const handleAdminLogin = async () => {
+        if (!adminId || !adminPw) {
+            alert("아이디와 비밀번호를 입력해주세요.");
+            return;
+        }
+        setLoading(true);
+        const res = await loginAdmin(adminId, adminPw);
+        if (res.success) {
+            router.push("/admin");
+        } else {
+            alert(res.error);
+            setLoading(false);
+        }
+    }
+
+    // ... gauge chart ...
+
+    return (
+        // ...
+        {/* Login Section (Only if not logged in) */ }
+            {
+        !isLoggedIn && (
+            <div className="bg-white/5 border border-white/10 p-5 rounded-2xl mb-8">
+                <div className="flex bg-white/5 p-1 rounded-lg mb-4">
+                    <button
+                        onClick={() => setLoginTab("user")}
+                        className={clsx("flex-1 py-1.5 text-xs font-bold rounded-md transition-all", loginTab === "user" ? "bg-white text-black" : "text-slate-400 hover:text-white")}
+                    >
+                        교인 (점수 확인)
+                    </button>
+                    <button
+                        onClick={() => setLoginTab("admin")}
+                        className={clsx("flex-1 py-1.5 text-xs font-bold rounded-md transition-all", loginTab === "admin" ? "bg-white text-black" : "text-slate-400 hover:text-white")}
+                    >
+                        관리자
+                    </button>
+                </div>
+
+                {loginTab === "user" ? (
+                    <>
+                        <h3 className="text-sm font-bold text-white mb-3 flex items-center gap-2">
+                            <LogIn className="w-4 h-4 text-primary" /> 내 점수 불러오기
+                        </h3>
+                        <div className="flex gap-2">
+                            <input
+                                type="text" placeholder="이름"
+                                value={loginName} onChange={(e) => setLoginName(e.target.value)}
+                                className="w-1/3 bg-black/30 border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:border-primary outline-none"
+                            />
+                            <input
+                                type="text" placeholder="휴대폰 번호 (뒷 4자리)"
+                                value={loginPhone} onChange={(e) => setLoginPhone(e.target.value)}
+                                className="flex-1 bg-black/30 border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:border-primary outline-none"
+                                onKeyDown={(e) => e.key === 'Enter' && handleLogin()}
+                            />
+                            <button
+                                onClick={handleLogin} disabled={loading}
+                                className="bg-primary text-white font-bold px-4 rounded-lg text-sm hover:bg-primary/90 disabled:opacity-50"
+                            >
+                                {loading ? "..." : "확인"}
+                            </button>
+                        </div>
+                    </>
+                ) : (
+                    <>
+                        <h3 className="text-sm font-bold text-white mb-3 flex items-center gap-2">
+                            <Lock className="w-4 h-4 text-primary" /> 관리자 로그인
+                        </h3>
+                        <div className="flex gap-2">
+                            <input
+                                type="text" placeholder="아이디"
+                                value={adminId} onChange={(e) => setAdminId(e.target.value)}
+                                className="w-1/3 bg-black/30 border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:border-primary outline-none"
+                            />
+                            <input
+                                type="password" placeholder="비밀번호"
+                                value={adminPw} onChange={(e) => setAdminPw(e.target.value)}
+                                className="flex-1 bg-black/30 border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:border-primary outline-none"
+                                onKeyDown={(e) => e.key === 'Enter' && handleAdminLogin()}
+                            />
+                            <button
+                                onClick={handleAdminLogin} disabled={loading}
+                                className="bg-primary text-white font-bold px-4 rounded-lg text-sm hover:bg-primary/90 disabled:opacity-50"
+                            >
+                                {loading ? "..." : "접속"}
+                            </button>
+                        </div>
+                    </>
+                )}
+            </div>
+        )
     }
 
     const handleLogout = () => {

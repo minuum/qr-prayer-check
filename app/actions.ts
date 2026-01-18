@@ -29,12 +29,13 @@ export async function checkAdminSession() {
     return auth?.value === "true";
 }
 
-export async function loginAdmin(password: string) {
-    if (password === ADMIN_PASSWORD) {
+export async function loginAdmin(id: string, password: string) {
+    if (id === "admin" && password === ADMIN_PASSWORD) {
         const cookieStore = await cookies();
         cookieStore.set("admin_auth", "true", { httpOnly: true, secure: true });
         return { success: true };
     }
+    if (id !== "admin") return { success: false, error: "아이디가 올바르지 않습니다." };
     return { success: false, error: "비밀번호가 올바르지 않습니다." };
 }
 
